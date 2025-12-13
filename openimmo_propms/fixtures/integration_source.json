@@ -1,0 +1,91 @@
+[
+ {
+  "api_endpoint": null,
+  "api_key": null,
+  "api_secret": null,
+  "docstatus": 0,
+  "doctype": "Integration Source",
+  "email_account": null,
+  "email_folder": "INBOX",
+  "enabled": 1,
+  "field_mappings": [
+   {
+    "parent": "OpenImmo Manual",
+    "parentfield": "field_mappings",
+    "parenttype": "Integration Source",
+    "source_field": "email",
+    "source_field_label": "Email",
+    "target_field": "Email",
+    "transformation": "None"
+   },
+   {
+    "parent": "OpenImmo Manual",
+    "parentfield": "field_mappings",
+    "parenttype": "Integration Source",
+    "source_field": "first_name",
+    "source_field_label": "First Name",
+    "target_field": "first_name",
+    "transformation": "None"
+   },
+   {
+    "parent": "OpenImmo Manual",
+    "parentfield": "field_mappings",
+    "parenttype": "Integration Source",
+    "source_field": "last_name",
+    "source_field_label": "Last Name",
+    "target_field": "last_name",
+    "transformation": "None"
+   },
+   {
+    "parent": "OpenImmo Manual",
+    "parentfield": "field_mappings",
+    "parenttype": "Integration Source",
+    "source_field": "salutation",
+    "source_field_label": "Salutation",
+    "target_field": "salutation",
+    "transformation": "None"
+   },
+   {
+    "parent": "OpenImmo Manual",
+    "parentfield": "field_mappings",
+    "parenttype": "Integration Source",
+    "source_field": "phone",
+    "source_field_label": "Phone",
+    "target_field": "mobile_no",
+    "transformation": "None"
+   },
+   {
+    "parent": "OpenImmo Manual",
+    "parentfield": "field_mappings",
+    "parenttype": "Integration Source",
+    "source_field": "company",
+    "source_field_label": "Company",
+    "target_field": "organization",
+    "transformation": "None"
+   },
+   {
+    "parent": "OpenImmo Manual",
+    "parentfield": "field_mappings",
+    "parenttype": "Integration Source",
+    "source_field": "inquiry",
+    "source_field_label": "Inquiry",
+    "target_field": "notes",
+    "transformation": "None"
+   }
+  ],
+  "ftp_directory": null,
+  "ftp_host": null,
+  "ftp_password": null,
+  "ftp_port": 21,
+  "ftp_username": null,
+  "last_sync_at": null,
+  "last_sync_status": null,
+  "modified": "2025-12-12 20:46:56.277488",
+  "name": "OpenImmo Manual",
+  "provider_name": "Immowelt",
+  "source_name": "OpenImmo Manual",
+  "source_type": "Manual Upload",
+  "sync_frequency": "Manual",
+  "target_doctype": "Lead"
+ }
+]

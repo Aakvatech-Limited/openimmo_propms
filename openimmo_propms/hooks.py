@@ -144,7 +144,11 @@ app_license = "mit"
 # 		"on_trash": "method"
 # 	}
 # }
-
+scheduler_events = {
+    "hourly": [
+        "openimmo_propms.services.sync_engine.execute_scheduled_sync"
+    ]
+}
 # Scheduled Tasks
 # ---------------
 
@@ -247,3 +251,9 @@ app_license = "mit"
 # List of apps whose translatable strings should be excluded from this app's translations.
 # ignore_translatable_strings_from = []
 
+# Scheduled Tasks
+# ---------------
+
+fixtures = [
+    {"dt": "Integration Source", "filters": [["name", "=", "OpenImmo Manual"]]},
+]

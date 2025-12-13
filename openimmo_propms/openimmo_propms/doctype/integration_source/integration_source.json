@@ -1,0 +1,236 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:source_name",
+ "creation": "2025-12-10 19:50:00.180334",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "source_name",
+  "enabled",
+  "column_break_1",
+  "source_type",
+  "section_break_2",
+  "target_doctype",
+  "sync_frequency",
+  "column_break_3",
+  "provider_name",
+  "section_break_creds",
+  "email_account",
+  "email_folder",
+  "api_endpoint",
+  "api_key",
+  "column_break_4",
+  "api_secret",
+  "ftp_host",
+  "ftp_port",
+  "column_break_5",
+  "ftp_username",
+  "ftp_password",
+  "ftp_directory",
+  "section_break_mapping",
+  "field_mappings",
+  "section_break_status",
+  "last_sync_at",
+  "column_break_6",
+  "last_sync_status"
+ ],
+ "fields": [
+  {
+   "fieldname": "source_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Source Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Enabled"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "source_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Source Type",
+   "options": "Manual Upload\nEmail\nAPI\nFTP",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_break_2",
+   "fieldtype": "Section Break",
+   "label": "Configuration"
+  },
+  {
+   "fieldname": "target_doctype",
+   "fieldtype": "Link",
+   "label": "Target DocType",
+   "options": "DocType",
+   "reqd": 1
+  },
+  {
+   "fieldname": "sync_frequency",
+   "fieldtype": "Select",
+   "label": "Background Sync Frequency",
+   "options": "Manual\nHourly\nDaily\nWeekly"
+  },
+  {
+   "fieldname": "column_break_3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "provider_name",
+   "fieldtype": "Data",
+   "label": "Provider Name"
+  },
+  {
+   "depends_on": "eval:doc.source_type!='Manual Upload'",
+   "fieldname": "section_break_creds",
+   "fieldtype": "Section Break",
+   "label": "Source Credentials"
+  },
+  {
+   "depends_on": "eval:doc.source_type=='Email'",
+   "fieldname": "email_account",
+   "fieldtype": "Link",
+   "label": "Email Account",
+   "options": "Email Account"
+  },
+  {
+   "default": "INBOX",
+   "depends_on": "eval:doc.source_type=='Email'",
+   "fieldname": "email_folder",
+   "fieldtype": "Data",
+   "label": "Email Folder"
+  },
+  {
+   "depends_on": "eval:doc.source_type=='API'",
+   "fieldname": "api_endpoint",
+   "fieldtype": "Data",
+   "label": "API Endpoint"
+  },
+  {
+   "depends_on": "eval:doc.source_type=='API'",
+   "fieldname": "api_key",
+   "fieldtype": "Password",
+   "label": "API Key"
+  },
+  {
+   "fieldname": "column_break_4",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.source_type=='API'",
+   "fieldname": "api_secret",
+   "fieldtype": "Password",
+   "label": "API Secret"
+  },
+  {
+   "depends_on": "eval:doc.source_type=='FTP'",
+   "fieldname": "ftp_host",
+   "fieldtype": "Data",
+   "label": "FTP Host"
+  },
+  {
+   "default": "21",
+   "depends_on": "eval:doc.source_type=='FTP'",
+   "fieldname": "ftp_port",
+   "fieldtype": "Int",
+   "label": "FTP Port"
+  },
+  {
+   "fieldname": "column_break_5",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.source_type=='FTP'",
+   "fieldname": "ftp_username",
+   "fieldtype": "Data",
+   "label": "FTP Username"
+  },
+  {
+   "depends_on": "eval:doc.source_type=='FTP'",
+   "fieldname": "ftp_password",
+   "fieldtype": "Password",
+   "label": "FTP Password"
+  },
+  {
+   "depends_on": "eval:doc.source_type=='FTP'",
+   "fieldname": "ftp_directory",
+   "fieldtype": "Data",
+   "label": "FTP Directory"
+  },
+  {
+   "fieldname": "section_break_mapping",
+   "fieldtype": "Section Break",
+   "label": "Field Mapping"
+  },
+  {
+   "fieldname": "field_mappings",
+   "fieldtype": "Table",
+   "label": "Field Mappings",
+   "options": "Integration Field Mapping"
+  },
+  {
+   "fieldname": "section_break_status",
+   "fieldtype": "Section Break",
+   "label": "Status"
+  },
+  {
+   "fieldname": "last_sync_at",
+   "fieldtype": "Datetime",
+   "label": "Last Sync At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_6",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "last_sync_status",
+   "fieldtype": "Data",
+   "label": "Last Sync Status",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [
+  {
+   "group": "Integration Job",
+   "link_doctype": "Integration Job",
+   "link_fieldname": "source_name"
+  }
+ ],
+ "modified": "2025-12-12 20:51:10.359956",
+ "modified_by": "Administrator",
+ "module": "Openimmo Propms",
+ "name": "Integration Source",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

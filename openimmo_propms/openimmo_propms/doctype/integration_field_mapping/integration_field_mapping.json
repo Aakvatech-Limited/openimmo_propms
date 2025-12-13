@@ -1,0 +1,57 @@
+{
+  "actions": [],
+  "creation": "2025-12-10 19:52:00.000000",
+  "doctype": "DocType",
+  "engine": "InnoDB",
+  "field_order": [
+    "source_field",
+    "source_field_label",
+    "column_break_1",
+    "target_field",
+    "transformation"
+  ],
+  "fields": [
+    {
+      "fieldname": "source_field",
+      "fieldtype": "Data",
+      "in_list_view": 1,
+      "label": "Source Field (XML Path)",
+      "reqd": 1
+    },
+    {
+      "fieldname": "source_field_label",
+      "fieldtype": "Data",
+      "in_list_view": 1,
+      "label": "Label"
+    },
+    {
+      "fieldname": "column_break_1",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "target_field",
+      "fieldtype": "Data",
+      "in_list_view": 1,
+      "label": "Mapped to Field",
+      "reqd": 1
+    },
+    {
+      "fieldname": "transformation",
+      "fieldtype": "Select",
+      "label": "Transformation",
+      "options": "None\nUppercase\nLowercase\nTrim\nDate Format"
+    }
+  ],
+  "index_web_pages_for_search": 1,
+  "istable": 1,
+  "links": [],
+  "modified": "2025-12-10 19:52:00.000000",
+  "modified_by": "Administrator",
+  "module": "Openimmo Propms",
+  "name": "Integration Field Mapping",
+  "owner": "Administrator",
+  "permissions": [],
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "states": []
+}
