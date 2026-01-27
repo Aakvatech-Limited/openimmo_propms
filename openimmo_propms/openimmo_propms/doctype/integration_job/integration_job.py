@@ -2,107 +2,101 @@
 # For license information, please see license.txt
 
 import frappe
-from frappe.model.document import Document
 from frappe import _
+from frappe.model.document import Document
 import os
 
-
 class IntegrationJob(Document):
-    def validate(self):
-        self._validate_file_extension()
-        self._set_file_name()
-    
-    def on_update(self):
-        if self._should_trigger_processing():
-            self.flags.ignore_processing = 1
-            self._process_job()
-    
-    def _validate_file_extension(self):
-        if not self.xml_file:
-            return
-        
-        file_ext = self.xml_file.lower().split('.')[-1]
-        if file_ext != 'xml':
-            frappe.throw(_("Only XML files are allowed"))
-    
-    def _set_file_name(self):
-        if self.xml_file and not self.file_name:
-            self.file_name = os.path.basename(self.xml_file)
-    
-    def _should_trigger_processing(self):
-        return (
-            self.xml_file 
-            and self.status == "Pending" 
-            and not self.flags.get('ignore_processing')
-        )
-    
-    def _process_job(self):
-        try:
-            from openimmo_propms.services.processor import process_integration_job
-            frappe.msgprint(_("Processing started..."), alert=True, indicator='blue')
-            process_integration_job(self.name)
-        except Exception as e:
-            frappe.log_error(frappe.get_traceback(), "Integration Job Auto-Process Failed")
-            frappe.msgprint(_("Processing failed. Check Error Log."), alert=True, indicator='red')
-    
-    def update_status(self, status, error_msg=None):
-        self.status = status
-        if error_msg:
-            self.error_log = error_msg
-        if status in ["Success", "Failed", "Partially Completed"]:
-            self.processed_at = frappe.utils.now()
-        self.save(ignore_permissions=True)
-        frappe.db.commit()
-    
-    def add_processing_detail(self, record_type, record_id, status, error_msg=None):
-        self.append('processing_details', {
-            'record_type': record_type,
-            'record_id': record_id,
-            'status': status,
-            'error_message': error_msg
-        })
+	"""
+	Controller for the Integration Job DocType.
+	Adheres to Frappe's principle of 'Thin Controllers, Thick Services'.
+	"""
+
+	def validate(self):
+		"""Standard validation hook."""
+		self._validate_file_extension()
+		self._set_file_name()
+
+	def _validate_file_extension(self):
+		"""Ensures only XML files are processed."""
+		if self.xml_file:
+			# Use splitext for robust extension checking
+			_, extension = os.path.splitext(self.xml_file.lower())
+			if extension != '.xml':
+				frappe.throw(_("Invalid file format. Please upload an XML file."))
+
+	def _set_file_name(self):
+		"""Automatically sets file_name from the attached path."""
+		if self.xml_file and not self.file_name:
+			self.file_name = os.path.basename(self.xml_file)
+
+	def update_status(self, status, error_msg=None):
+		"""
+		High-performance status update.
+		Bypasses full document validation to avoid recursion.
+		"""
+		self.db_set("status", status)
+		if error_msg:
+			self.db_set("error_log", error_msg)
+		
+		if status in ["Success", "Failed", "Partially Completed"]:
+			self.db_set("processed_at", frappe.utils.now())
 
 
-# Standalone function for button action
+
+# --- Whitelisted API Actions ---
+
 @frappe.whitelist()
-def process_now(doc):
-    """Process integration job - called from button"""
-    import json
-    
-    # Parse doc if it's a string
-    if isinstance(doc, str):
-        doc = json.loads(doc)
-    
-    job_name = doc.get('name')
-    
+def process_now(name=None):
+    """
+    Directly executes the integration job synchronously.
+    No enqueue, no background task - immediate processing.
+    """
+    # 1. Name Resolution
+    job_name = name or frappe.form_dict.get('name')
+    if not job_name and frappe.form_dict.get('doc'):
+        import json
+        doc = frappe.form_dict.get('doc')
+        job_name = json.loads(doc).get('name') if isinstance(doc, str) else doc.get('name')
+
     if not job_name:
-        frappe.throw(_("Job name not provided"))
-    
+        frappe.throw(_("Integration Job name is required."))
+
+    # 2. Document Loading
     job = frappe.get_doc("Integration Job", job_name)
-    
+
     if not job.xml_file:
-        frappe.throw(_("Please attach an XML file first"))
-    
-    if job.status not in ["Pending", "Failed"]:
-        frappe.throw(_("Only Pending or Failed jobs can be processed"))
-    
-    from openimmo_propms.services.processor import process_integration_job
-    
+        frappe.throw(_("Please attach an XML file first."))
+
+    if job.status == "Processing":
+        frappe.msgprint(_("Job is already being processed."), alert=True)
+        return
+
+    # 3. Direct Execution Logic
     try:
+        # Status update before starting
+        job.update_status("Processing")
+        frappe.db.commit() # Save 'Processing' state immediately
+
+        # Call the service directly
+        from openimmo_propms.services.processor import process_integration_job
+        
+        # This will run in the current request thread (Synchronous)
         process_integration_job(job.name)
+        
+        # Reload to get updated stats for the response
         job.reload()
         
-        frappe.msgprint(
-            _("Processing completed! Total: {0}, Success: {1}, Failed: {2}").format(
-                job.total_records, job.successful_records, job.failed_records
-            ), 
-            alert=True, 
-            indicator='green' if job.failed_records == 0 else 'orange'
-        )
-        
+        # Return success message with summary
+        return {
+            "status": "Success",
+            "message": _("Processing completed: {0} Success, {1} Failed").format(
+                job.successful_records, job.failed_records
+            )
+        }
+
     except Exception as e:
-        frappe.log_error(frappe.get_traceback(), f"Integration Job Processing Failed - {job.name}")
-        frappe.msgprint(_("Processing failed: {0}").format(str(e)), alert=True, indicator='red')
-        raise
-    
-    return True
+        frappe.log_error(frappe.get_traceback(), f"Manual Direct Processing Failed - {job_name}")
+        job.update_status("Failed", str(e))
+        frappe.db.commit()
+        frappe.throw(_("Processing failed: {0}").format(str(e)))

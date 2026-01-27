@@ -86,7 +86,7 @@ def _parse_feedback_format(root):
                 'preferred_contact': _get_text(interessent, 'bevorzugt'),
                 'request_type': _get_text(interessent, 'wunsch'),
                 'property_reference': property_data.get('external_id'),
-                'property_portal_id': property_data.get('portal_obj_id')
+                'property_portal_id': property_data.get('portal_id')
             }
             
             # Only add if applicant has email or phone
@@ -184,7 +184,8 @@ def _extract_applicants(root):
             'inquiry': _get_text(person, 'anfrage') or _get_text(person, 'nachricht'),
             'preferred_contact': _get_text(person, 'bevorzugt'),
             'request_type': _get_text(person, 'wunsch'),
-            'property_reference': _get_text(person, '../objektnr_extern')
+            'property_reference': _get_text(person, '../objektnr_extern'),
+            'property_portal_id': _get_text(person, '../objektnr_intern') or _get_text(person, '../portal_obj_id')
         }
         applicants.append(applicant_data)
     

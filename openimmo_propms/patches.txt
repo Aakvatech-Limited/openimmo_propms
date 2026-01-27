@@ -4,4 +4,4 @@
 
 [post_model_sync]
 # Patches added in this section will be executed after doctypes are migrated
-openimmo_propms.patches.custom_fields.create-openimmo_custom_fields
+openimmo_propms.patches.custom_fields.openimmo_custom_fields_fcrm
