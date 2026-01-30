@@ -6,108 +6,116 @@ from frappe import _
 from abc import ABC, abstractmethod
 import requests
 import base64
-
-
+import os
 
 class BaseProcessor(ABC):
-    """Abstract base class for all integration processors"""
+    """
+    Abstract Base Class for all OpenImmo Integration Processors.
+    Provides shared utilities for API calls, file saving, and job creation.
+    """
     
-    def __init__(self, source):
-        self.source = source
-        self.source_doc = frappe.get_doc("Integration Source", source)
+    def __init__(self, source_name):
+        self.source = source_name
+        self.source_doc = frappe.get_doc("Integration Source", source_name)
     
     @abstractmethod
     def receive_files(self):
-        """Receive files from source - must be implemented by child classes"""
+        """
+        Abstract method to fetch files from a remote or local source.
+        Must return a list of created Integration Job names.
+        """
         raise NotImplementedError("Subclass must implement receive_files()")
     
-    def validate_file(self, file_path):
-        """Validate XML file structure"""
-        from openimmo_propms.services.validator import validate_xml_file
-        return validate_xml_file(file_path)
-    
-    def create_job(self, file_path, file_name):
-        """Create Integration Job record"""
-        job = frappe.get_doc({
-            'doctype': 'Integration Job',
+    def create_job(self, file_url, file_name):
+        """
+        Creates an Integration Job record for a received XML file.
+        """
+        job = frappe.new_doc('Integration Job')
+        job.update({
             'source_name': self.source,
-            'xml_file': file_path,
+            'xml_file': file_url,
             'file_name': file_name,
             'status': 'Pending'
         })
         job.insert(ignore_permissions=True)
+        
+        # Explicit commit to ensure the job is visible to background workers 
+        # even if the main sync process continues for other files.
         frappe.db.commit()
         return job.name
     
-    def log_error(self, title, message):
-        """Log error to Error Log"""
-        frappe.log_error(message, title)
-    
-    def update_source_status(self, status, count=None, last_sync_at=None):
-        """Update source last sync status"""
-        self.source_doc.last_sync_status = status
-        if count is not None and hasattr(self.source_doc, "last_sync_count"):
-            self.source_doc.last_sync_count = count
-        if last_sync_at:
-            self.source_doc.last_sync_at = last_sync_at
-        self.source_doc.save(ignore_permissions=True)
-        frappe.db.commit()
+    def update_source_status(self, status, count=None):
+        """
+        Updates the synchronization status on the Integration Source record.
+        Uses db_set to avoid triggering unnecessary document hooks.
+        """
+        self.source_doc.db_set("last_sync_status", status)
+        self.source_doc.db_set("last_sync_at", frappe.utils.now())
+        if count is not None:
+            self.source_doc.db_set("last_sync_count", count)
 
+    def log_error(self, message):
+        """Logs integration errors specifically tied to this source."""
+        frappe.log_error(
+            title=f"Integration Error: {self.source}",
+            message=message
+        )
 
-    # ===== API helper methods (common for all API processors) =====
+    # ===== API & HTTP UTILITIES =====
 
-    def _make_api_request(self):
-        """Common GET call using Integration Source config"""
-        if not getattr(self.source_doc, "api_endpoint", None):
-            frappe.throw(_("API Endpoint not configured"))
+    def _make_api_request(self, method="GET", payload=None):
+        """Standardized HTTP request handler using Source configuration."""
+        if not self.source_doc.api_endpoint:
+            frappe.throw(_("API Endpoint is missing for source: {0}").format(self.source))
 
         headers = self._build_api_headers()
-
         try:
-            response = requests.get(
-                self.source_doc.api_endpoint,
+            response = requests.request(
+                method=method,
+                url=self.source_doc.api_endpoint,
                 headers=headers,
-                timeout=30,
-                verify=True,
+                json=payload if method == "POST" else None,
+                timeout=30
             )
             response.raise_for_status()
             return response
         except requests.RequestException as e:
-            self.log_error(f"API Request Failed - {self.source}", str(e))
+            self.log_error(str(e))
             raise
 
     def _build_api_headers(self):
-        """Build API request headers with auth"""
+        """Builds headers with secure password retrieval for Auth."""
         headers = {
-            "Accept": "application/xml, application/json",
-            "User-Agent": "PropMS-Integration/1.0",
+            "Accept": "application/xml",
+            "User-Agent": "PropMS-XML-Importer/1.0",
         }
 
-        api_key = getattr(self.source_doc, "api_key", None)
-        if api_key:
-            api_key = self.source_doc.get_password("api_key")
-            headers["Authorization"] = f"Bearer {api_key}"
+        # Bearer Token Auth
+        if self.source_doc.api_key:
+            token = self.source_doc.get_password("api_key")
+            headers["Authorization"] = f"Bearer {token}"
             return headers
 
-        api_user = getattr(self.source_doc, "api_username", None)
-        api_pass = getattr(self.source_doc, "api_password", None)
-        if api_user and api_pass:
-            api_pass = self.source_doc.get_password("api_password")
-            token = base64.b64encode(f"{api_user}:{api_pass}".encode()).decode()
-            headers["Authorization"] = f"Basic {token}"
+        # Basic Auth
+        user = self.source_doc.api_username
+        password = self.source_doc.get_password("api_password")
+        if user and password:
+            auth_str = f"{user}:{password}"
+            encoded_auth = base64.b64encode(auth_str.encode()).decode()
+            headers["Authorization"] = f"Basic {encoded_auth}"
 
         return headers
 
-    def _save_api_file(self, content, filename):
-        """Save response content as File and return file_url"""
-        file_content = content.encode("utf-8") if isinstance(content, str) else content
-
-        file_doc = frappe.get_doc({
+    def _save_file_to_frappe(self, content, filename):
+        """
+        Saves raw content as a private Frappe File and returns the URL.
+        """
+        _file = frappe.get_doc({
             "doctype": "File",
             "file_name": filename,
-            "content": file_content,
-            "decode": True,
+            "content": content,
             "is_private": 1,
+            "folder": "Home/Attachments"
         })
-        file_doc.insert(ignore_permissions=True)
-        return file_doc.file_url
+        _file.insert(ignore_permissions=True)
+        return _file.file_url
