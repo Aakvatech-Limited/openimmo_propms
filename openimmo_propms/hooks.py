@@ -254,6 +254,3 @@ scheduler_events = {
 # Scheduled Tasks
 # ---------------
 
-fixtures = [
-    {"dt": "Integration Source", "filters": [["name", "=", "OpenImmo Manual"]]},
-]
