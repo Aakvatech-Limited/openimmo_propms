@@ -1,195 +1,187 @@
 {
-  "actions": [
-    {
-      "action": "openimmo_propms.openimmo_propms.doctype.integration_job.integration_job.process_now",
-      "action_type": "Server Action",
-      "label": "Process Now"
-    }
-  ],
-
-  "autoname": "format:JOB-{source_name}-{#####}",
-  "creation": "2025-12-10 19:55:00.000000",
-  "doctype": "DocType",
-  "engine": "InnoDB",
-  "field_order": [
-    "source_name",
-    "source_type",
-    "column_break_1",
-    "status",
-    "section_break_2",
-    "xml_file",
-    "file_name",
-    "column_break_3",
-    "provider_name",
-    "received_at",
-    "section_break_3",
-    "total_records",
-    "successful_records",
-    "column_break_4",
-    "failed_records",
-    "processed_at",
-    "section_break_4",
-    "error_log",
-    "log_message",
-    "section_break_5",
-    "processing_details"
-  ],
-  "fields": [
-    {
-      "fieldname": "source_name",
-      "fieldtype": "Link",
-      "in_list_view": 1,
-      "in_standard_filter": 1,
-      "label": "Integration Source",
-      "options": "Integration Source",
-      "reqd": 1
-    },
-    {
-      "fetch_from": "source_name.source_type",
-      "fieldname": "source_type",
-      "fieldtype": "Data",
-      "in_list_view": 1,
-      "label": "Source Type",
-      "read_only": 1
-    },
-    {
-      "fieldname": "column_break_1",
-      "fieldtype": "Column Break"
-    },
-    {
-      "default": "Pending",
-      "fieldname": "status",
-      "fieldtype": "Select",
-      "in_list_view": 1,
-      "in_standard_filter": 1,
-      "label": "Status",
-      "options": "Pending\nProcessing\nSuccess\nFailed\nPartially Completed",
-      "reqd": 1
-    },
-    {
-      "fieldname": "section_break_2",
-      "fieldtype": "Section Break",
-      "label": "File Details"
-    },
-    {
-      "fieldname": "xml_file",
-      "fieldtype": "Attach",
-      "label": "XML File"
-    },
-    {
-      "fieldname": "file_name",
-      "fieldtype": "Data",
-      "label": "File Name",
-      "read_only": 1
-    },
-    {
-      "fieldname": "column_break_3",
-      "fieldtype": "Column Break"
-    },
-    {
-      "fetch_from": "source_name.provider_name",
-      "fieldname": "provider_name",
-      "fieldtype": "Data",
-      "label": "Provider Name",
-      "read_only": 1
-    },
-    {
-      "default": "Now",
-      "fieldname": "received_at",
-      "fieldtype": "Datetime",
-      "label": "Received At"
-    },
-    {
-      "fieldname": "section_break_3",
-      "fieldtype": "Section Break",
-      "label": "Processing Summary"
-    },
-    {
-      "default": "0",
-      "fieldname": "total_records",
-      "fieldtype": "Int",
-      "label": "Total Records",
-      "read_only": 1
-    },
-    {
-      "default": "0",
-      "fieldname": "successful_records",
-      "fieldtype": "Int",
-      "label": "Successful Records",
-      "read_only": 1
-    },
-    {
-      "fieldname": "column_break_4",
-      "fieldtype": "Column Break"
-    },
-    {
-      "default": "0",
-      "fieldname": "failed_records",
-      "fieldtype": "Int",
-      "label": "Failed Records",
-      "read_only": 1
-    },
-    {
-      "fieldname": "processed_at",
-      "fieldtype": "Datetime",
-      "label": "Processed At",
-      "read_only": 1
-    },
-    {
-      "collapsible": 1,
-      "fieldname": "section_break_4",
-      "fieldtype": "Section Break",
-      "label": "Error Details"
-    },
-    {
-      "fieldname": "error_log",
-      "fieldtype": "Long Text",
-      "label": "Error Log",
-      "read_only": 1
-    },
-    {
-      "fieldname": "log_message",
-      "fieldtype": "Small Text",
-      "label": "Log Message",
-      "read_only": 1
-    },
-    {
-      "collapsible": 1,
-      "fieldname": "section_break_5",
-      "fieldtype": "Section Break",
-      "label": "Processing Details"
-    },
-    {
-      "fieldname": "processing_details",
-      "fieldtype": "Table",
-      "label": "Processing Details",
-      "options": "Integration Job Detail"
-    }
-  ],
-  "index_web_pages_for_search": 1,
-  "links": [],
-  "modified": "2026-02-08 14:40:00.000000",
-  "modified_by": "Administrator",
-  "module": "Openimmo Propms",
-  "name": "Integration Job",
-  "naming_rule": "Expression",
-  "owner": "Administrator",
-  "permissions": [
-    {
-      "create": 1,
-      "delete": 1,
-      "email": 1,
-      "export": 1,
-      "print": 1,
-      "read": 1,
-      "report": 1,
-      "role": "System Manager",
-      "share": 1,
-      "write": 1
-    }
-  ],
-  "sort_field": "modified",
-  "sort_order": "DESC",
-  "states": [],
-  "track_changes": 1
+ "actions": [],
+ "autoname": "format:JOB-{source_name}-{#####}",
+ "creation": "2025-12-10 19:55:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "source_name",
+  "source_type",
+  "column_break_1",
+  "status",
+  "section_break_2",
+  "xml_file",
+  "file_name",
+  "column_break_3",
+  "provider_name",
+  "received_at",
+  "section_break_3",
+  "total_records",
+  "successful_records",
+  "column_break_4",
+  "failed_records",
+  "processed_at",
+  "section_break_4",
+  "error_log",
+  "log_message",
+  "section_break_5",
+  "processing_details"
+ ],
+ "fields": [
+  {
+   "fieldname": "source_name",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Integration Source",
+   "options": "Integration Source",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "source_name.source_type",
+   "fieldname": "source_type",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Source Type",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Pending",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Pending\nProcessing\nSuccess\nFailed\nPartially Completed",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_break_2",
+   "fieldtype": "Section Break",
+   "label": "File Details"
+  },
+  {
+   "fieldname": "xml_file",
+   "fieldtype": "Attach",
+   "label": "XML File"
+  },
+  {
+   "fieldname": "file_name",
+   "fieldtype": "Data",
+   "label": "File Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fetch_from": "source_name.provider_name",
+   "fieldname": "provider_name",
+   "fieldtype": "Data",
+   "label": "Provider Name",
+   "read_only": 1
+  },
+  {
+   "default": "Now",
+   "fieldname": "received_at",
+   "fieldtype": "Datetime",
+   "label": "Received At"
+  },
+  {
+   "fieldname": "section_break_3",
+   "fieldtype": "Section Break",
+   "label": "Processing Summary"
+  },
+  {
+   "default": "0",
+   "fieldname": "total_records",
+   "fieldtype": "Int",
+   "label": "Total Records",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "successful_records",
+   "fieldtype": "Int",
+   "label": "Successful Records",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_4",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "failed_records",
+   "fieldtype": "Int",
+   "label": "Failed Records",
+   "read_only": 1
+  },
+  {
+   "fieldname": "processed_at",
+   "fieldtype": "Datetime",
+   "label": "Processed At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_4",
+   "fieldtype": "Section Break",
+   "label": "Error Details"
+  },
+  {
+   "fieldname": "error_log",
+   "fieldtype": "Long Text",
+   "label": "Error Log",
+   "read_only": 1
+  },
+  {
+   "fieldname": "log_message",
+   "fieldtype": "Small Text",
+   "label": "Log Message",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_5",
+   "fieldtype": "Section Break",
+   "label": "Processing Details"
+  },
+  {
+   "fieldname": "processing_details",
+   "fieldtype": "Table",
+   "label": "Processing Details",
+   "options": "Integration Job Detail"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-02-08 16:58:24.311634",
+ "modified_by": "Administrator",
+ "module": "Openimmo Propms",
+ "name": "Integration Job",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
 }
