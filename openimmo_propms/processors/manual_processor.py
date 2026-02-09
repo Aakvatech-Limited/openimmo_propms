@@ -1,37 +1,21 @@
-# Copyright (c) 2025, Aakvatech and contributors
-# For license information, please see license.txt
+# path/to/openimmo_propms/processors/manual_processor.py
 
 import frappe
-from frappe import _
 from openimmo_propms.processors.base_processor import BaseProcessor
+from openimmo_propms.services.processor import run_integration_engine
 
 class ManualProcessor(BaseProcessor):
-    """
-    Processor for manual file uploads.
-    Instead of fetching from a remote server, it fetches 'Pending' 
-    Integration Jobs already created by users in the system.
-    """
-    
     def receive_files(self):
         """
-        Identifies Integration Jobs that were manually uploaded but not yet processed.
-        Returns a list of Job names to be handled by the sync engine.
+        Finds 'Pending' manual jobs and triggers the dynamic engine.
         """
-        # 1. Fetch pending jobs specifically for this source
         pending_jobs = frappe.get_all("Integration Job", filters={
             "source_name": self.source,
-            "status": "Pending",
-            "xml_file": ["is", "set"] # Ensure there is actually a file to process
+            "status": "Pending"
         }, fields=["name"])
 
-        job_names = [job.name for job in pending_jobs]
+        for job in pending_jobs:
+            run_integration_engine(job.name)
 
-        if not job_names:
-            # We use logger instead of msgprint for background/scheduled compatibility
-            frappe.logger("utils").info(f"ManualProcessor: No pending jobs found for {self.source}")
-            return []
-
-        # 2. Update the Source status using BaseProcessor's utility
-        self.update_source_status("Success", count=len(job_names))
-        
-        return job_names
+        self.update_source_status("Success", count=len(pending_jobs))
+        return [j.name for j in pending_jobs]

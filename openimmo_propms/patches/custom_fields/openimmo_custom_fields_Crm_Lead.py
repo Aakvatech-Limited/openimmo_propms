@@ -6,19 +6,23 @@ from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 def execute():
     """
-    Add custom fields for OpenImmo XML Import to CRM Lead.
-    
-    Architecture Focus: 
-    - Idempotency via 'openimmo_id_key'
-    - External Reference via 'external_property_id'
+    Add custom fields for OpenImmo XML Import to Lead.
     """
+    # Identify the correct Lead DocType name (Lead vs CRM Lead)
+    doctype = "CRM Lead"
+    if not frappe.db.exists("DocType", doctype) and frappe.db.exists("DocType", "CRM Lead"):
+        doctype = "CRM Lead"
+
+    if not frappe.db.exists("DocType", doctype):
+        return
+
     fields = {
-        "CRM Lead": [
+        doctype: [
             {
                 "fieldname": "openimmo_tab",
                 "fieldtype": "Tab Break",
                 "label": "OpenImmo",
-                "insert_after": "facebook_form_id", 
+                "insert_after": "facebook_form_id"
             },
             {
                 "fieldname": "openimmo_inquiry_section",
@@ -32,7 +36,7 @@ def execute():
                 "fieldtype": "Data",
                 "label": "OpenImmo Unique ID",
                 "insert_after": "openimmo_inquiry_section",
-                "unique": 1,  # Database level unique constraint for safety
+                "unique": 1,
                 "read_only": 1,
                 "description": "Used to prevent duplicate Lead creation (portal_obj_id)"
             },
@@ -86,5 +90,4 @@ def execute():
         ]
     }
     
-    # create_custom_fields internally handles checking if fields exist
     create_custom_fields(fields, update=True)

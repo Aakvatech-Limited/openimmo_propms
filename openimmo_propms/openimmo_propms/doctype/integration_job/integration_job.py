@@ -79,10 +79,10 @@ def process_now(name=None):
         frappe.db.commit() # Save 'Processing' state immediately
 
         # Call the service directly
-        from openimmo_propms.services.processor import process_integration_job
+        from openimmo_propms.services.processor import run_integration_engine
         
         # This will run in the current request thread (Synchronous)
-        process_integration_job(job.name)
+        run_integration_engine(job.name)
         
         # Reload to get updated stats for the response
         job.reload()
