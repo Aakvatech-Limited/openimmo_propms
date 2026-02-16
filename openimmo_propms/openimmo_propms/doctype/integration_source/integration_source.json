@@ -238,7 +238,7 @@
    "link_fieldname": "source_name"
   }
  ],
- "modified": "2026-02-16 18:23:40.181962",
+ "modified": "2026-02-16 18:38:50.239224",
  "modified_by": "Administrator",
  "module": "Openimmo Propms",
  "name": "Integration Source",
@@ -261,6 +261,15 @@
  "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
- "states": [],
+ "states": [
+  {
+   "color": "Red",
+   "title": "Inactive"
+  },
+  {
+   "color": "Green",
+   "title": "Active"
+  }
+ ],
  "track_changes": 1
 }
