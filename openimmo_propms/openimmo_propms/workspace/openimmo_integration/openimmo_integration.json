@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[{\"id\":\"Q8L1zXPnCn\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">OpenImmo Integration</span>\",\"col\":12}},{\"id\":\"o7KRK4kQZ0\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Integration Source\",\"col\":3}},{\"id\":\"uYtkexF5PI\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Integration Job\",\"col\":3}},{\"id\":\"dvJ9nPGtF3\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Property\",\"col\":3}},{\"id\":\"wqI3cfI8_X\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Lead\",\"col\":3}},{\"id\":\"KEog6ifZo1\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"dbmZ_gpPi6\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Quick Filters</span>\",\"col\":12}},{\"id\":\"PjINICPMa-\",\"type\":\"quick_list\",\"data\":{\"quick_list_name\":\"Active Sources\",\"col\":4}},{\"id\":\"Xvj0UgkT6o\",\"type\":\"quick_list\",\"data\":{\"quick_list_name\":\"Recent Jobs\",\"col\":4}},{\"id\":\"VnJ8YmppR2\",\"type\":\"quick_list\",\"data\":{\"quick_list_name\":\"Failed Jobs\",\"col\":4}}]",
+ "content": "[{\"id\":\"Q8L1zXPnCn\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">OpenImmo Integration</span>\",\"col\":12}},{\"id\":\"o7KRK4kQZ0\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Integration Source\",\"col\":3}},{\"id\":\"uYtkexF5PI\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Integration Job\",\"col\":3}},{\"id\":\"dbmZ_gpPi6\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Quick Filters</span>\",\"col\":12}},{\"id\":\"nOB09kpqnu\",\"type\":\"quick_list\",\"data\":{\"quick_list_name\":\"Active Sources\",\"col\":4}},{\"id\":\"RHLPdRAmh8\",\"type\":\"quick_list\",\"data\":{\"quick_list_name\":\"Recent Jobs\",\"col\":4}},{\"id\":\"pTNsYKHZ1K\",\"type\":\"quick_list\",\"data\":{\"quick_list_name\":\"Failed Jobs\",\"col\":4}}]",
  "creation": "2025-12-12 20:40:07.270824",
  "custom_blocks": [],
  "docstatus": 0,
@@ -12,59 +12,8 @@
  "indicator_color": "",
  "is_hidden": 0,
  "label": "Openimmo Integration",
- "links": [
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Integration Source",
-   "link_count": 0,
-   "link_to": "Integration Source",
-   "link_type": "DocType",
-   "onboard": 1,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Integration Job",
-   "link_count": 0,
-   "link_to": "Integration Job",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Property",
-   "link_count": 0,
-   "link_to": "Property",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Lead",
-   "link_count": 0,
-   "link_to": "Lead",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Error Log",
-   "link_count": 0,
-   "link_to": "Error Log",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  }
- ],
- "modified": "2025-12-13 10:22:30.836656",
+ "links": [],
+ "modified": "2026-02-16 18:21:34.971902",
  "modified_by": "Administrator",
  "module": "Openimmo Propms",
  "name": "Openimmo Integration",
@@ -76,7 +25,7 @@
   {
    "document_type": "Integration Source",
    "label": "Active Sources",
-   "quick_list_filter": "[[\"Integration Source\",\"enabled\",\"=\",1,false]]"
+   "quick_list_filter": "[[\"Integration Source\",\"status\",\"=\",\"Active\",false]]"
   },
   {
    "document_type": "Integration Job",
@@ -86,7 +35,7 @@
   {
    "document_type": "Integration Job",
    "label": "Failed Jobs",
-   "quick_list_filter": "{\"status\": \"Failed\"}"
+   "quick_list_filter": "[[\"Integration Job\",\"status\",\"=\",\"Failed\",false]]"
   }
  ],
  "roles": [
@@ -112,20 +61,6 @@
    "label": "Integration Job",
    "link_to": "Integration Job",
    "stats_filter": "{\"status\": \"Pending\"}",
-   "type": "DocType"
-  },
-  {
-   "color": "Green",
-   "doc_view": "List",
-   "label": "Property",
-   "link_to": "Property",
-   "type": "DocType"
-  },
-  {
-   "color": "Purple",
-   "doc_view": "List",
-   "label": "Lead",
-   "link_to": "Lead",
    "type": "DocType"
   }
  ],

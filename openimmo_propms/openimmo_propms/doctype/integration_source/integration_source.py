@@ -7,6 +7,9 @@ from frappe import _
 
 
 class IntegrationSource(Document):
+    def before_save(self):
+        self.status = "Active" if self.enabled else "Inactive"
+
     def validate(self):
         self._validate_source_config()
         self._validate_target_doctype()
