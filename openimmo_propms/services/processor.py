@@ -3,7 +3,7 @@
 import frappe
 from frappe.utils import now_datetime
 from openimmo_propms.services.parser import get_dict_from_xml
-from openimmo_propms.services.mapper import map_external_data_to_doctype
+from openimmo_propms.services.mapper import map_external_data_to_doctype, DuplicateRecordError
 
 @frappe.whitelist()
 def run_integration_engine(job_name):
@@ -37,27 +37,34 @@ def run_integration_engine(job_name):
 		for entry in entries:
 			try:
 				doc_id = map_external_data_to_doctype(source.name, entry)
-				if doc_id:
-					job.successful_records += 1
-					job.append("processing_details", {
-						"record_type": source.target_doctype,
-						"record_id": doc_id,
-						"status": "Success"
-					})
-				else:
-					job.failed_records += 1
-					job.append("processing_details", {
-						"record_type": source.target_doctype,
-						"status": "Skipped",
-						"error_message": "Duplicate or Mapping Issue"
-					})
+				job.successful_records += 1
+				job.append("processing_details", {
+					"record_type": source.target_doctype,
+					"record_id": doc_id,
+					"status": "Success"
+				})
+			except DuplicateRecordError as e:
+				# Records already existing are marked as skipped with a clear message
+				job.append("processing_details", {
+					"record_type": source.target_doctype,
+					"record_id": e.record_id,
+					"status": "Skipped",
+					"error_message": frappe._("Already exists: {0}").format(e.record_id)
+				})
 			except Exception as e:
 				job.failed_records += 1
+				error_trace = frappe.get_traceback()
 				job.append("processing_details", {
 					"record_type": source.target_doctype,
 					"status": "Failed",
 					"error_message": str(e)
 				})
+				
+				# Log the raw error dump for debugging
+				if not job.error_log:
+					job.error_log = ""
+				job.error_log += f"\n--- Error for Entry ---\n{error_trace}\n"
+				frappe.log_error(f"Integration record failed: {str(e)}", error_trace)
 
 		job.status = "Success" if job.failed_records == 0 else ("Failed" if job.successful_records == 0 else "Partially Completed")
 		job.processed_at = now_datetime()

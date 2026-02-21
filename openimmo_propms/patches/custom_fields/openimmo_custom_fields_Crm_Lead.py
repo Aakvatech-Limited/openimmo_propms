@@ -79,13 +79,6 @@ def execute():
                 "fieldtype": "Section Break",
                 "label": "Inquiry Message",
                 "insert_after": "inquiry_type"
-            },
-            {
-                "fieldname": "inquiry_text",
-                "fieldtype": "Long Text",
-                "label": "Full Inquiry Text",
-                "insert_after": "inquiry_details_section",
-                "description": "The complete message body from the XML 'anfrage' node"
             }
         ]
     }
