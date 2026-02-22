@@ -17,10 +17,11 @@
   "received_at",
   "section_break_3",
   "total_records",
-  "successful_records",
-  "column_break_4",
-  "failed_records",
   "processed_at",
+  "column_break_4",
+  "successful_records",
+  "skipped_records",
+  "failed_records",
   "section_break_4",
   "error_log",
   "log_message",
@@ -67,7 +68,8 @@
   {
    "fieldname": "xml_file",
    "fieldtype": "Attach",
-   "label": "XML File"
+   "label": "XML File",
+   "reqd": 1
   },
   {
    "fieldname": "file_name",
@@ -109,6 +111,13 @@
    "fieldname": "successful_records",
    "fieldtype": "Int",
    "label": "Successful Records",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "skipped_records",
+   "fieldtype": "Int",
+   "label": "Skipped Records",
    "read_only": 1
   },
   {
@@ -159,7 +168,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-02-08 16:58:24.311634",
+ "modified": "2026-02-22 11:02:22.151587",
  "modified_by": "Administrator",
  "module": "Openimmo Propms",
  "name": "Integration Job",

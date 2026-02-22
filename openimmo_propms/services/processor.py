@@ -32,6 +32,7 @@ def run_integration_engine(job_name):
 		job.total_records = len(entries)
 		job.successful_records = 0
 		job.failed_records = 0
+		job.skipped_records = 0
 		job.processing_details = []
 
 		for entry in entries:
@@ -45,6 +46,7 @@ def run_integration_engine(job_name):
 				})
 			except DuplicateRecordError as e:
 				# Records already existing are marked as skipped with a clear message
+				job.skipped_records += 1
 				job.append("processing_details", {
 					"record_type": source.target_doctype,
 					"record_id": e.record_id,
@@ -68,8 +70,8 @@ def run_integration_engine(job_name):
 
 		job.status = "Success" if job.failed_records == 0 else ("Failed" if job.successful_records == 0 else "Partially Completed")
 		job.processed_at = now_datetime()
-		job.log_message = frappe._("Processed {0} records. Success: {1}, Failed: {2}").format(
-			job.total_records, job.successful_records, job.failed_records
+		job.log_message = frappe._("Processed {0} records. Success: {1}, Skipped: {2}, Failed: {3}").format(
+			job.total_records, job.successful_records, job.skipped_records, job.failed_records
 		)
 		job.save()
 		
