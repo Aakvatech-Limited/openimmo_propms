@@ -6,27 +6,26 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
+  "section_break_general",
   "source_name",
-  "enabled",
-  "status",
-  "column_break_1",
   "source_type",
-  "section_break_2",
+  "enabled",
+  "column_break_general",
+  "provider_name",
+  "section_break_config",
   "target_doctype",
   "root_node",
+  "column_break_config",
   "sync_frequency",
-  "column_break_3",
-  "provider_name",
   "section_break_creds",
   "email_account",
   "email_folder",
   "api_endpoint",
   "api_key",
-  "column_break_4",
-  "api_secret",
   "ftp_host",
   "ftp_port",
-  "column_break_5",
+  "column_break_creds",
+  "api_secret",
   "ftp_username",
   "ftp_password",
   "ftp_directory",
@@ -34,10 +33,16 @@
   "field_mappings",
   "section_break_status",
   "last_sync_at",
-  "column_break_6",
+  "status",
+  "column_break_status",
   "last_sync_status"
  ],
  "fields": [
+  {
+   "fieldname": "section_break_general",
+   "fieldtype": "Section Break",
+   "label": "General"
+  },
   {
    "fieldname": "source_name",
    "fieldtype": "Data",
@@ -45,17 +50,6 @@
    "label": "Source Name",
    "reqd": 1,
    "unique": 1
-  },
-  {
-   "default": "0",
-   "fieldname": "enabled",
-   "fieldtype": "Check",
-   "in_list_view": 1,
-   "label": "Enabled"
-  },
-  {
-   "fieldname": "column_break_1",
-   "fieldtype": "Column Break"
   },
   {
    "fieldname": "source_type",
@@ -66,7 +60,23 @@
    "reqd": 1
   },
   {
-   "fieldname": "section_break_2",
+   "fieldname": "column_break_general",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Enabled"
+  },
+  {
+   "fieldname": "provider_name",
+   "fieldtype": "Data",
+   "label": "Provider Name"
+  },
+  {
+   "fieldname": "section_break_config",
    "fieldtype": "Section Break",
    "label": "Configuration"
   },
@@ -81,23 +91,17 @@
    "description": "The XML path where the records start. Example: openimmo.immobilie",
    "fieldname": "root_node",
    "fieldtype": "Data",
-   "label": "Root Node (XML Path)",
-   "reqd": 0
+   "label": "Root Node (XML Path)"
+  },
+  {
+   "fieldname": "column_break_config",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "sync_frequency",
    "fieldtype": "Select",
    "label": "Background Sync Frequency",
    "options": "Manual\nHourly\nDaily\nWeekly"
-  },
-  {
-   "fieldname": "column_break_3",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "provider_name",
-   "fieldtype": "Data",
-   "label": "Provider Name"
   },
   {
    "depends_on": "eval:doc.source_type!='Manual Upload'",
@@ -132,16 +136,6 @@
    "label": "API Key"
   },
   {
-   "fieldname": "column_break_4",
-   "fieldtype": "Column Break"
-  },
-  {
-   "depends_on": "eval:doc.source_type=='API'",
-   "fieldname": "api_secret",
-   "fieldtype": "Password",
-   "label": "API Secret"
-  },
-  {
    "depends_on": "eval:doc.source_type=='FTP'",
    "fieldname": "ftp_host",
    "fieldtype": "Data",
@@ -155,8 +149,14 @@
    "label": "FTP Port"
   },
   {
-   "fieldname": "column_break_5",
+   "fieldname": "column_break_creds",
    "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.source_type=='API'",
+   "fieldname": "api_secret",
+   "fieldtype": "Password",
+   "label": "API Secret"
   },
   {
    "depends_on": "eval:doc.source_type=='FTP'",
@@ -199,20 +199,20 @@
    "read_only": 1
   },
   {
-   "fieldname": "column_break_6",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "\nActive\nInactive",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_status",
    "fieldtype": "Column Break"
   },
   {
    "fieldname": "last_sync_status",
    "fieldtype": "Data",
    "label": "Last Sync Status",
-   "read_only": 1
-  },
-  {
-   "fieldname": "status",
-   "fieldtype": "Select",
-   "label": "Status",
-   "options": "\nActive\nInactive",
    "read_only": 1
   }
  ],
@@ -225,7 +225,7 @@
    "link_fieldname": "source_name"
   }
  ],
- "modified": "2026-02-22 10:05:35.560701",
+ "modified": "2026-02-22 10:41:50.765842",
  "modified_by": "Administrator",
  "module": "Openimmo Propms",
  "name": "Integration Source",
