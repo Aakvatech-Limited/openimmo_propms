@@ -64,14 +64,46 @@ def get_duplicate_record_id(doc, source):
 	return None
 
 def get_value_by_json_path(data, path):
-	"""Traverses dictionary keys using dot-notation."""
+	"""Traverses dictionary keys using dot-notation or performs a recursive search for single keys."""
 	if not path: return None
+	
+	# 1. Try Exact Path Traversal (e.g. interessent.email)
+	current_data = data
 	for key in path.split('.'):
-		if isinstance(data, dict):
-			data = data.get(key)
+		if isinstance(current_data, dict):
+			current_data = current_data.get(key)
 		else:
-			return None
-	return data
+			current_data = None
+			break
+	
+	if current_data is not None:
+		return current_data
+
+	# 2. Smart Search: If not found by path and is a single key, search recursively
+	if '.' not in path:
+		return find_recursively(data, path)
+	
+	return None
+
+def find_recursively(data, target_key):
+	"""Recursive search for a key in a nested dictionary."""
+	if not isinstance(data, dict):
+		return None
+	
+	if target_key in data:
+		return data[target_key]
+	
+	for key, value in data.items():
+		if isinstance(value, dict):
+			result = find_recursively(value, target_key)
+			if result is not None:
+				return result
+		elif isinstance(value, list):
+			for item in value:
+				result = find_recursively(item, target_key)
+				if result is not None:
+					return result
+	return None
 
 def apply_data_transformation(value, transform_type):
 	"""Applies standard string transformations."""
