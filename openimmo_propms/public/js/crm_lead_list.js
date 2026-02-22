@@ -5,6 +5,21 @@ frappe.listview_settings['CRM Lead'] = {
 				title: __('Import Lead XML'),
 				fields: [
 					{
+						label: __('Manual Source'),
+						fieldname: 'source_name',
+						fieldtype: 'Link',
+						options: 'Integration Source',
+						get_query: function() {
+							return {
+								filters: {
+									'source_type': 'Manual Upload',
+									'enabled': 1
+								}
+							}
+						},
+						reqd: 1
+					},
+					{
 						label: __('XML File'),
 						fieldname: 'xml_file',
 						fieldtype: 'Attach',
@@ -16,7 +31,8 @@ frappe.listview_settings['CRM Lead'] = {
 					frappe.call({
 						method: 'openimmo_propms.api.server_script.import_lead_xml',
 						args: {
-							file_url: values.xml_file
+							file_url: values.xml_file,
+							source_name: values.source_name
 						},
 						callback: function(r) {
 							if (!r.exc) {
