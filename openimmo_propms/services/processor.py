@@ -81,8 +81,10 @@ def run_integration_engine(job_name):
 		})
 
 def navigate_to_root_node(data, path):
-	"""Helper to move to the starting data block."""
-	if not path: return data
+	"""Helper to move to the starting data block. If path is missing, return all data."""
+	if not path: 
+		return [data] # Treat the whole dictionary as a single entry
+	
 	for key in path.split('.'):
 		if isinstance(data, dict):
 			data = data.get(key)

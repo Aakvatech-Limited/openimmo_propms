@@ -82,7 +82,7 @@
    "fieldname": "root_node",
    "fieldtype": "Data",
    "label": "Root Node (XML Path)",
-   "reqd": 1
+   "reqd": 0
   },
   {
    "fieldname": "sync_frequency",
