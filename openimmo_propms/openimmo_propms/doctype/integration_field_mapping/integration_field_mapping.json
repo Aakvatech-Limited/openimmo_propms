@@ -8,6 +8,7 @@
     "target_field",
     "is_unique",
     "auto_create_link",
+    "link_target_doctype",
     "column_break_1",
     "transformation",
     "default_value"
@@ -43,6 +44,16 @@
       "in_list_view": 1,
       "label": "Auto Create Link Record",
       "description": "If enabled, the linked record will be created if it does not exist."
+    },
+    {
+      "depends_on": "eval:doc.auto_create_link == 1",
+      "mandatory_depends_on": "eval:doc.auto_create_link == 1",
+      "fieldname": "link_target_doctype",
+      "fieldtype": "Link",
+      "in_list_view": 1,
+      "label": "Link Target DocType",
+      "options": "DocType",
+      "description": "Specific DocType to create the record in."
     },
     {
       "fieldname": "column_break_1",

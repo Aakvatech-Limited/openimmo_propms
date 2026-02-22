@@ -14,8 +14,6 @@
   "section_break_2",
   "target_doctype",
   "root_node",
-  "xml_namespace",
-  "data_split_node",
   "sync_frequency",
   "column_break_3",
   "provider_name",
@@ -85,18 +83,6 @@
    "fieldtype": "Data",
    "label": "Root Node (XML Path)",
    "reqd": 1
-  },
-  {
-   "description": "Namespace URL for XML parsing. Example: http://www.openimmo.de/",
-   "fieldname": "xml_namespace",
-   "fieldtype": "Data",
-   "label": "XML Namespace"
-  },
-  {
-   "description": "The tag name or JSON key to split records by. Example: angebot",
-   "fieldname": "data_split_node",
-   "fieldtype": "Data",
-   "label": "Data Split Node"
   },
   {
    "fieldname": "sync_frequency",
@@ -230,6 +216,7 @@
    "read_only": 1
   }
  ],
+ "hide_toolbar": 1,
  "index_web_pages_for_search": 1,
  "links": [
   {
@@ -238,7 +225,7 @@
    "link_fieldname": "source_name"
   }
  ],
- "modified": "2026-02-16 18:38:50.239224",
+ "modified": "2026-02-22 10:05:35.560701",
  "modified_by": "Administrator",
  "module": "Openimmo Propms",
  "name": "Integration Source",

@@ -39,7 +39,7 @@ def map_external_data_to_doctype(source_name, entry_data):
 			value = apply_data_transformation(value, mapping.transformation)
 			
 			# 2. Type Casting and Special Handling for Link Fields
-			value = cast_value_to_fieldtype(value, df, mapping.auto_create_link)
+			value = cast_value_to_fieldtype(value, df, mapping.auto_create_link, mapping.link_target_doctype)
 			
 			if value:
 				target_doc.set(mapping.target_field, value)
@@ -83,7 +83,7 @@ def apply_data_transformation(value, transform_type):
 	if transform_type == "Float": return flt(value)
 	return value
 
-def cast_value_to_fieldtype(value, df, auto_create_link=False):
+def cast_value_to_fieldtype(value, df, auto_create_link=False, link_target_doctype=None):
 	"""
 	Ensures the value matches the target DocType field type.
 	Handles Link fields by checking/creating the linked record.
@@ -98,7 +98,7 @@ def cast_value_to_fieldtype(value, df, auto_create_link=False):
 	elif fieldtype in ["Small Text", "Text", "Long Text"]:
 		return str(value)
 	elif fieldtype == "Link":
-		return handle_link_field(value, df.options, auto_create_link)
+		return handle_link_field(value, link_target_doctype or df.options, auto_create_link)
 	
 	return value
 
