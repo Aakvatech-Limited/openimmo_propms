@@ -3,40 +3,64 @@
 
 frappe.ui.form.on("Integration Job", {
 	refresh: function (frm) {
-		// 1. Render Dynamic Header Info
+		// 1. Clear existing intro to prevent duplication after Save
+		frm.set_intro("");
+
+		// 2. Render Dynamic Header Info
 		frm.trigger("render_status_intro");
 
-		// 2. Setup Action Buttons
+		// 3. Setup Action Buttons
 		frm.trigger("setup_actions");
 	},
 
 	render_status_intro: function (frm) {
-		// Map status to indicators and dynamic messages
-		const status_map = {
-			Pending: ["blue", __("Job is ready for processing.")],
-			Processing: ["orange", __("Integration engine is currently running. Please wait...")],
-			Success: ["green", __("All records processed successfully. Total: {0}", [frm.doc.successful_records])],
-			Failed: ["red", __("Processing failed. Refer to the error log for details. Total Failed: {0}", [frm.doc.failed_records])],
-			"Partially Completed": [
-				"yellow",
-				__("Completed with errors. Total: {0}, Success: {1}, Failed: {2}", [
-					frm.doc.total_records,
-					frm.doc.successful_records,
-					frm.doc.failed_records,
-				]),
-			],
-		};
+		if (frm.doc.status === "Pending") {
+			if (!frm.is_new() && frm.doc.xml_file) {
+				frm.set_intro(__("Job is ready for processing. Click 'Process Now' to start sync."), "blue");
+			} else if (frm.is_new()) {
+				frm.set_intro(__("Please upload the XML file and save the job to begin processing."), "orange");
+			} else {
+				frm.set_intro(__("XML File is missing. Please attach a file and save to proceed."), "red");
+			}
+			return;
+		}
 
-		const config = status_map[frm.doc.status] || ["grey", __("Status Unknown")];
-		frm.set_intro(config[1], config[0]);
+		// Modern HTML Cards for Processing Summary
+		const total = frm.doc.total_records || 0;
+		const success = frm.doc.successful_records || 0;
+		const skipped = frm.doc.skipped_records || 0;
+		const failed = frm.doc.failed_records || 0;
+
+		const cards_html = `
+			<div style="display: flex; gap: 15px; margin-top: 10px; flex-wrap: wrap;">
+				<div style="flex: 1; min-width: 120px; padding: 12px; border-radius: 8px; background: #fff; border: 1px solid #d1d8dd; border-bottom: 4px solid #1a73e8; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+					<div style="font-size: 1.4em; font-weight: bold; color: #1a73e8;">${total}</div>
+					<div style="font-size: 0.85em; color: #666; font-weight: 500;">Total Records</div>
+				</div>
+				<div style="flex: 1; min-width: 120px; padding: 12px; border-radius: 8px; background: #fff; border: 1px solid #d1d8dd; border-bottom: 4px solid #28a745; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+					<div style="font-size: 1.4em; font-weight: bold; color: #28a745;">${success}</div>
+					<div style="font-size: 0.85em; color: #666; font-weight: 500;">Success</div>
+				</div>
+				<div style="flex: 1; min-width: 120px; padding: 12px; border-radius: 8px; background: #fff; border: 1px solid #d1d8dd; border-bottom: 4px solid #ffa00a; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+					<div style="font-size: 1.4em; font-weight: bold; color: #ffa00a;">${skipped}</div>
+					<div style="font-size: 0.85em; color: #666; font-weight: 500;">Skipped</div>
+				</div>
+				<div style="flex: 1; min-width: 120px; padding: 12px; border-radius: 8px; background: #fff; border: 1px solid #d1d8dd; border-bottom: 4px solid #dc3545; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+					<div style="font-size: 1.4em; font-weight: bold; color: #dc3545;">${failed}</div>
+					<div style="font-size: 0.85em; color: #666; font-weight: 500;">Failed</div>
+				</div>
+			</div>
+		`;
+
+		frm.set_intro(cards_html, "blue");
 	},
 
 	setup_actions: function (frm) {
 		// Remove existing buttons to prevent duplication on refresh
 		frm.clear_custom_buttons();
 
-		// Standard Practice: Processing ke waqt button hide rakhte hain
-		if (frm.doc.status !== "Processing") {
+		// Show button only if the document is saved and not currently processing
+		if (!frm.is_new() && frm.doc.status !== "Processing") {
 			const btn_label =
 				frm.doc.status === "Pending" ? __("Process Now") : __("Re-process Job");
 

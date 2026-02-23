@@ -7,33 +7,70 @@ from openimmo_propms.processors.email_processor import EmailProcessor
 from openimmo_propms.processors.api_processor import APIProcessor
 from openimmo_propms.processors.ftp_processor import FTPProcessor
 from openimmo_propms.processors.manual_processor import ManualProcessor
+from openimmo_propms.services.processor import run_integration_engine
 
 
+@frappe.whitelist()
+def test_integration_connection(source_name):
+    """Verifies the connection to the integration source without processing files."""
+    source = frappe.get_doc("Integration Source", source_name)
+    try:
+        processor = _get_processor(source)
+        if hasattr(processor, "test_connection"):
+            success, message = processor.test_connection()
+            return {"status": "success" if success else "error", "message": message}
+        else:
+            return {"status": "error", "message": _("Test Connection not implemented for this source type.")}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@frappe.whitelist()
 def execute_sync(source_name):
     """Execute sync for a specific integration source"""
+    source = frappe.get_doc("Integration Source", source_name)
     try:
-        source = frappe.get_doc("Integration Source", source_name)
-        
         if not source.enabled:
             frappe.throw(_("Integration Source is disabled"))
         
+        source.db_set("last_sync_status", "Syncing...")
+        frappe.db.commit()
+
         # Get appropriate processor based on source type
         processor = _get_processor(source)
         
-        # Receive files from source
+        # 1. Fetch files
         job_names = processor.receive_files()
         
-        frappe.msgprint(
-            _("Sync completed. Created {0} job(s)").format(len(job_names)),
-            alert=True,
-            indicator='green'
-        )
+        if not job_names:
+            source.db_set("last_sync_status", "Success (No new files)")
+            return {"status": "success", "message": _("No new files found on FTP.")}
+
+        # 2. Process each job
+        processed_count = 0
+        for job_name in job_names:
+            try:
+                run_integration_engine(job_name)
+                processed_count += 1
+            except Exception as e:
+                frappe.log_error(f"Processing failed for {job_name}: {str(e)}", "Sync Engine Process")
+
+        source.db_set("last_sync_status", "Success")
+        source.db_set("last_sync_at", frappe.utils.now())
         
-        return job_names
+        return {
+            "status": "success",
+            "message": _("Sync completed. Processed {0} of {1} job(s)").format(processed_count, len(job_names))
+        }
         
     except Exception as e:
+        error_msg = str(e)
         frappe.log_error(frappe.get_traceback(), f"Sync Engine Error - {source_name}")
-        frappe.throw(_("Sync failed: {0}").format(str(e)))
+        source.db_set("last_sync_status", "Failed")
+        source.db_set("last_sync_at", frappe.utils.now())
+        return {
+            "status": "error",
+            "message": error_msg
+        }
 
 
 def execute_scheduled_sync():
