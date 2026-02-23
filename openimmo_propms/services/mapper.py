@@ -36,7 +36,7 @@ def map_external_data_to_doctype(source_name, entry_data):
 			))
 
 		if value is not None and value != "":
-			value = apply_data_transformation(value, mapping.transformation)
+			value = apply_data_transformation(value, mapping, entry_data)
 			
 			# 2. Type Casting and Special Handling for Link Fields
 			value = cast_value_to_fieldtype(value, df, mapping.auto_create_link, mapping.link_target_doctype)
@@ -105,15 +105,61 @@ def find_recursively(data, target_key):
 					return result
 	return None
 
-def apply_data_transformation(value, transform_type):
-	"""Applies standard string transformations."""
+def apply_data_transformation(value, mapping, entry_data=None):
+	"""Applies standard string transformations or custom expressions."""
 	if not value: return value
+	
+	transform_type = mapping.transformation
+	
 	if transform_type == "Upper Case": return str(value).upper()
 	if transform_type == "Lower Case": return str(value).lower()
 	if transform_type == "Title Case": return str(value).title()
 	if transform_type == "Integer": return cint(value)
 	if transform_type == "Float": return flt(value)
+	if transform_type == "Expression" and mapping.get("expression_pattern"):
+		return evaluate_expression(mapping.expression_pattern, value, entry_data)
+		
 	return value
+
+def evaluate_expression(pattern, value, entry_data):
+	"""
+	Replaces placeholders in the pattern with actual values.
+	{value} is the current field value.
+	{path.to.field} is an XML path relative to entry_data.
+	Supports date placeholders: {DD}, {MM}, {YY}, {YYYY}
+	"""
+	import re
+	from frappe.utils import now_datetime
+	
+	now = now_datetime()
+	
+	def replace_placeholder(match):
+		placeholder = match.group(1)
+		
+		# Current value (xml_field or value as fallback)
+		if placeholder in ["xml_field", "value"]:
+			return str(value)
+		
+		# Date placeholders
+		date_map = {
+			"DD": now.strftime("%d"),
+			"MM": now.strftime("%m"),
+			"YY": now.strftime("%y"),
+			"YYYY": now.strftime("%Y")
+		}
+		if placeholder in date_map:
+			return date_map[placeholder]
+		
+		# If it's another field reference
+		if entry_data:
+			ref_value = get_value_by_json_path(entry_data, placeholder)
+			return str(ref_value) if ref_value is not None else ""
+		
+		return ""
+
+	# Match content inside curly braces
+	result = re.sub(r"\{([^}]+)\}", replace_placeholder, pattern)
+	return result
 
 def cast_value_to_fieldtype(value, df, auto_create_link=False, link_target_doctype=None):
 	"""
