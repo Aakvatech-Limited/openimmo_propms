@@ -15,6 +15,9 @@ def test_integration_connection(source_name):
     """Verifies the connection to the integration source without processing files."""
     source = frappe.get_doc("Integration Source", source_name)
     try:
+        if source.operation_type == "Export" and source.source_type != "FTP":
+            return {"status": "error", "message": _("Connection test is only available for FTP export sources.")}
+
         processor = _get_processor(source)
         if hasattr(processor, "test_connection"):
             success, message = processor.test_connection()
@@ -29,6 +32,9 @@ def execute_sync(source_name):
     """Execute sync for a specific integration source"""
     source = frappe.get_doc("Integration Source", source_name)
     try:
+        if source.operation_type == "Export":
+            frappe.throw(_("Use the export API for Export sources"))
+
         if not source.enabled:
             frappe.throw(_("Integration Source is disabled"))
         
@@ -78,6 +84,7 @@ def execute_scheduled_sync():
     sources = frappe.get_all(
         "Integration Source",
         filters={
+            "operation_type": "Import",
             "enabled": 1,
             "sync_frequency": ["!=", "Manual"]
         },
