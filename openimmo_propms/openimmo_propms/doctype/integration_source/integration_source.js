@@ -1,8 +1,12 @@
 frappe.ui.form.on("Integration Source", {
+	onload(frm) {
+		toggle_credential_fields(frm);
+	},
+
 	refresh(frm) {
-		// Only show FTP buttons if source type is FTP
+		toggle_credential_fields(frm);
+
 		if (frm.doc.source_type === "FTP") {
-			
 			// 1. Connection Test Button
 			frm.add_custom_button(__("FTP Test Connection"), () => {
 				frm.call({
@@ -30,8 +34,40 @@ frappe.ui.form.on("Integration Source", {
 				});
 			});
 
+			if (frm.doc.operation_type === "Export" && frm.doc.enabled) {
+				frm.add_custom_button(__("Run Export Now"), () => {
+					frm.call({
+						method: "openimmo_propms.api.export.run_openimmo_export",
+						args: {
+							source_name: frm.doc.name,
+							save_file: 1
+						},
+						freeze: true,
+						freeze_message: __("Generating and uploading OpenImmo XML..."),
+						callback: (r) => {
+							if (!r.exc && r.message) {
+								frappe.msgprint({
+									title: __("Export Completed"),
+									message: __(
+										"Records: {0}<br>Delivery: {1}<br>Channel: {2}<br>File: {3}",
+										[
+											r.message.record_count || 0,
+											r.message.delivery_status || __("Generated"),
+											r.message.delivery_channel || __("Manual"),
+											r.message.file_url || __("Not saved")
+										]
+									),
+									indicator: "green"
+								});
+								frm.reload_doc();
+							}
+						}
+					});
+				});
+			}
+
 			// 2. Manual Sync Button
-			if (frm.doc.enabled && frm.doc.sync_frequency === "Manual") {
+			if (frm.doc.operation_type === "Import" && frm.doc.enabled && frm.doc.sync_frequency === "Manual") {
 				frm.add_custom_button(__("FTP Sync Now"), () => {
 					frappe.confirm(__("Are you sure you want to fetch and process files from FTP now?"), () => {
 						// State: Start Syncing in UI
@@ -67,7 +103,37 @@ frappe.ui.form.on("Integration Source", {
 						});
 					});
 				});
-			} // End if manual
-		} // End if FTP
+			}
+		}
+	},
+
+	source_type(frm) {
+		toggle_credential_fields(frm);
+	},
+
+	operation_type(frm) {
+		toggle_credential_fields(frm);
 	},
 });
+
+function toggle_credential_fields(frm) {
+	const is_import = frm.doc.operation_type === "Import";
+	const is_export = frm.doc.operation_type === "Export";
+	const is_ftp = frm.doc.source_type === "FTP";
+	const is_email = frm.doc.source_type === "Email";
+	const is_api = frm.doc.source_type === "API";
+	const show_credentials = (is_import && frm.doc.source_type !== "Manual Upload") || is_ftp;
+
+	frm.toggle_display("section_break_creds", show_credentials);
+	frm.toggle_display("email_account", is_import && is_email);
+	frm.toggle_display("email_folder", is_import && is_email);
+	frm.toggle_display("api_endpoint", is_import && is_api);
+	frm.toggle_display("api_key", is_import && is_api);
+	frm.toggle_display("api_secret", is_import && is_api);
+
+	["ftp_host", "ftp_port", "ftp_username", "ftp_password", "ftp_directory"].forEach((fieldname) => {
+		frm.toggle_display(fieldname, is_ftp);
+	});
+
+	frm.toggle_display("ftp_transfer_enabled", is_export && is_ftp);
+}

@@ -9,6 +9,7 @@
   "section_break_general",
   "source_name",
   "source_type",
+  "operation_type",
   "enabled",
   "column_break_general",
   "provider_name",
@@ -17,6 +18,24 @@
   "root_node",
   "column_break_config",
   "sync_frequency",
+  "section_break_export",
+  "export_format",
+  "transfer_scope",
+  "transfer_mode",
+  "portal_name",
+  "anbieter_id",
+  "save_file_by_default",
+  "ftp_transfer_enabled",
+  "record_packaging",
+  "xml_template",
+  "name_field",
+  "company_field",
+  "status_field",
+  "publish_field",
+  "image_field",
+  "image_group",
+  "image_location",
+  "base_media_url",
   "section_break_creds",
   "email_account",
   "email_folder",
@@ -57,6 +76,15 @@
    "in_list_view": 1,
    "label": "Source Type",
    "options": "Manual Upload\nEmail\nAPI\nFTP",
+   "reqd": 1
+  },
+  {
+   "default": "Import",
+   "fieldname": "operation_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Operation Type",
+   "options": "Import\nExport",
    "reqd": 1
   },
   {
@@ -104,13 +132,143 @@
    "options": "Manual\nHourly\nDaily\nWeekly"
   },
   {
-   "depends_on": "eval:doc.source_type!='Manual Upload'",
+   "depends_on": "eval:doc.operation_type=='Export'",
+   "fieldname": "section_break_export",
+   "fieldtype": "Section Break",
+   "label": "Export Settings"
+  },
+  {
+   "default": "OpenImmo",
+   "depends_on": "eval:doc.operation_type=='Export'",
+   "fieldname": "export_format",
+   "fieldtype": "Select",
+   "label": "Export Format",
+   "options": "OpenImmo"
+  },
+  {
+   "default": "VOLL",
+   "depends_on": "eval:doc.operation_type=='Export'",
+   "fieldname": "transfer_scope",
+   "fieldtype": "Select",
+   "label": "Transfer Scope",
+   "options": "VOLL\nTEIL"
+  },
+  {
+   "default": "NEW",
+   "depends_on": "eval:doc.operation_type=='Export'",
+   "fieldname": "transfer_mode",
+   "fieldtype": "Select",
+   "label": "Transfer Mode",
+   "options": "NEW\nCHANGE\nDELETE"
+  },
+  {
+   "depends_on": "eval:doc.operation_type=='Export'",
+   "fieldname": "portal_name",
+   "fieldtype": "Data",
+   "label": "Portal Name"
+  },
+  {
+   "depends_on": "eval:doc.operation_type=='Export'",
+   "fieldname": "anbieter_id",
+   "fieldtype": "Data",
+   "label": "Anbieter ID"
+  },
+  {
+   "default": "1",
+   "depends_on": "eval:doc.operation_type=='Export'",
+   "fieldname": "save_file_by_default",
+   "fieldtype": "Check",
+   "label": "Save File By Default"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.operation_type=='Export' && doc.source_type=='FTP'",
+   "fieldname": "ftp_transfer_enabled",
+   "fieldtype": "Check",
+   "label": "Enable FTP Transfer"
+  },
+  {
+   "default": "Single XML for All Records",
+   "depends_on": "eval:doc.operation_type=='Export'",
+   "fieldname": "record_packaging",
+   "fieldtype": "Select",
+   "label": "Record Packaging",
+   "options": "Single XML for All Records\nSeparate XML per Record"
+  },
+  {
+   "depends_on": "eval:doc.operation_type=='Export'",
+   "fieldname": "xml_template",
+   "fieldtype": "Code",
+   "label": "XML Template",
+   "options": "XML"
+  },
+  {
+   "default": "name",
+   "depends_on": "eval:doc.operation_type=='Export'",
+   "description": "Field used for the optional property_name filter",
+   "fieldname": "name_field",
+   "fieldtype": "Data",
+   "label": "Name Field"
+  },
+  {
+   "default": "company",
+   "depends_on": "eval:doc.operation_type=='Export'",
+   "description": "Field used for the optional filter_company filter",
+   "fieldname": "company_field",
+   "fieldtype": "Data",
+   "label": "Company Field"
+  },
+  {
+   "default": "status",
+   "depends_on": "eval:doc.operation_type=='Export'",
+   "description": "Field used for the optional filter_status filter",
+   "fieldname": "status_field",
+   "fieldtype": "Data",
+   "label": "Status Field"
+  },
+  {
+   "depends_on": "eval:doc.operation_type=='Export'",
+   "description": "Optional field used for the optional filter_publish filter",
+   "fieldname": "publish_field",
+   "fieldtype": "Data",
+   "label": "Publish Field"
+  },
+  {
+   "depends_on": "eval:doc.operation_type=='Export'",
+   "description": "Property field that stores the image path or URL. Example: photo",
+   "fieldname": "image_field",
+   "fieldtype": "Data",
+   "label": "Image Field"
+  },
+  {
+   "default": "TITELBILD",
+   "depends_on": "eval:doc.operation_type=='Export' && doc.image_field",
+   "fieldname": "image_group",
+   "fieldtype": "Data",
+   "label": "Image Group"
+  },
+  {
+   "default": "EXTERN",
+   "depends_on": "eval:doc.operation_type=='Export' && doc.image_field",
+   "fieldname": "image_location",
+   "fieldtype": "Data",
+   "label": "Image Location"
+  },
+  {
+   "depends_on": "eval:doc.operation_type=='Export' && doc.image_field",
+   "description": "Optional base URL used to convert /files/... into an absolute public URL",
+   "fieldname": "base_media_url",
+   "fieldtype": "Data",
+   "label": "Base Media URL"
+  },
+  {
+   "depends_on": "eval:(doc.operation_type=='Import' && doc.source_type!='Manual Upload') || doc.source_type=='FTP'",
    "fieldname": "section_break_creds",
    "fieldtype": "Section Break",
    "label": "Source Credentials"
   },
   {
-   "depends_on": "eval:doc.source_type=='Email'",
+   "depends_on": "eval:doc.operation_type=='Import' && doc.source_type=='Email'",
    "fieldname": "email_account",
    "fieldtype": "Link",
    "label": "Email Account",
@@ -118,19 +276,19 @@
   },
   {
    "default": "INBOX",
-   "depends_on": "eval:doc.source_type=='Email'",
+   "depends_on": "eval:doc.operation_type=='Import' && doc.source_type=='Email'",
    "fieldname": "email_folder",
    "fieldtype": "Data",
    "label": "Email Folder"
   },
   {
-   "depends_on": "eval:doc.source_type=='API'",
+   "depends_on": "eval:doc.operation_type=='Import' && doc.source_type=='API'",
    "fieldname": "api_endpoint",
    "fieldtype": "Data",
    "label": "API Endpoint"
   },
   {
-   "depends_on": "eval:doc.source_type=='API'",
+   "depends_on": "eval:doc.operation_type=='Import' && doc.source_type=='API'",
    "fieldname": "api_key",
    "fieldtype": "Password",
    "label": "API Key"
@@ -153,7 +311,7 @@
    "fieldtype": "Column Break"
   },
   {
-   "depends_on": "eval:doc.source_type=='API'",
+   "depends_on": "eval:doc.operation_type=='Import' && doc.source_type=='API'",
    "fieldname": "api_secret",
    "fieldtype": "Password",
    "label": "API Secret"

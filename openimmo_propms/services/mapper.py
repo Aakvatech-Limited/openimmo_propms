@@ -117,8 +117,24 @@ def apply_data_transformation(value, mapping, entry_data=None):
 	if transform_type == "Integer": return cint(value)
 	if transform_type == "Float": return flt(value)
 	if transform_type == "Expression" and mapping.get("expression_pattern"):
-		return evaluate_expression(mapping.expression_pattern, value, entry_data)
-		
+		value = evaluate_expression(mapping.expression_pattern, value, entry_data)
+
+	return apply_value_mapping(value, mapping.get("value_mapping"))
+
+def apply_value_mapping(value, value_mapping):
+	"""Map values using KEY=VALUE lines."""
+	if value is None or value == "" or not value_mapping:
+		return value
+
+	value_str = str(value).strip()
+	for row in str(value_mapping).splitlines():
+		row = row.strip()
+		if not row or "=" not in row:
+			continue
+		source_value, mapped_value = row.split("=", 1)
+		if value_str == source_value.strip():
+			return mapped_value.strip()
+
 	return value
 
 def evaluate_expression(pattern, value, entry_data):

@@ -6,9 +6,12 @@
  "engine": "InnoDB",
  "field_order": [
   "source_configuration_section",
+  "source_value_type",
   "source_field",
+  "static_value",
   "column_break_source",
   "transformation",
+  "value_mapping",
   "expression_pattern",
   "default_value",
   "target_mapping_section",
@@ -26,12 +29,28 @@
    "label": "Source Configuration"
   },
   {
+   "default": "Field",
+   "fieldname": "source_value_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Source Value Type",
+   "options": "Field\nStatic"
+  },
+  {
    "description": "Example: immobilie.geo.plz",
+   "depends_on": "eval:doc.source_value_type=='Field'",
    "fieldname": "source_field",
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Source Field (XML Path)",
-   "reqd": 1
+   "mandatory_depends_on": "eval:doc.source_value_type=='Field'"
+  },
+  {
+   "depends_on": "eval:doc.source_value_type=='Static'",
+   "fieldname": "static_value",
+   "fieldtype": "Data",
+   "label": "Static Value",
+   "mandatory_depends_on": "eval:doc.source_value_type=='Static'"
   },
   {
    "fieldname": "column_break_source",
@@ -43,6 +62,12 @@
    "fieldtype": "Select",
    "label": "Transformation",
    "options": "None\nUpper Case\nLower Case\nTitle Case\nInteger\nFloat\nExpression"
+  },
+  {
+   "description": "One per line. Example: AKTIV=CHANGE",
+   "fieldname": "value_mapping",
+   "fieldtype": "Small Text",
+   "label": "Value Mapping"
   },
   {
    "depends_on": "eval:doc.transformation == 'Expression'",
@@ -69,7 +94,7 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Target Field (Frappe)",
-   "reqd": 1
+   "mandatory_depends_on": "eval:doc.source_value_type=='Field'"
   },
   {
    "fieldname": "column_break_target",

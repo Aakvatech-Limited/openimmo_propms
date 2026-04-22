@@ -11,7 +11,10 @@ class IntegrationSource(Document):
         self.status = "Active" if self.enabled else "Inactive"
 
     def validate(self):
-        self._validate_source_config()
+        if self.operation_type == "Export":
+            self._validate_export_config()
+        else:
+            self._validate_source_config()
         self._validate_target_doctype()
     
     def on_update(self):
@@ -28,7 +31,61 @@ class IntegrationSource(Document):
         
         if self.source_type == "FTP" and not (self.ftp_host and self.ftp_username):
             frappe.throw(_("FTP Host and Username are required for FTP source type"))
-    
+
+    def _validate_export_config(self):
+        """Validate export-specific configuration"""
+        if not self.export_format:
+            frappe.throw(_("Export Format is required for Export operation type"))
+
+        if not self.transfer_scope:
+            self.transfer_scope = "VOLL"
+
+        if not self.transfer_mode:
+            self.transfer_mode = "NEW"
+
+        if self.export_format == "OpenImmo" and not self.anbieter_id:
+            frappe.throw(_("Anbieter ID is required for OpenImmo export"))
+
+        if self.source_type == "FTP" and self.ftp_transfer_enabled and not (self.ftp_host and self.ftp_username):
+            frappe.throw(_("FTP Host and Username are required for FTP export delivery"))
+
+        if self.transfer_scope == "TEIL":
+            self._require_export_mapping(
+                "verwaltung_techn.aktion",
+                _("TEIL transfer requires a field mapping for verwaltung_techn.aktion"),
+            )
+
+        if self._uses_delete_action():
+            for xml_path in [
+                "verwaltung_techn.objektnr_intern",
+                "verwaltung_techn.objektnr_extern",
+                "verwaltung_techn.openimmo_obid",
+            ]:
+                self._require_export_mapping(
+                    xml_path,
+                    _("DELETE export requires a field mapping for {0}").format(xml_path),
+                )
+
+    def _require_export_mapping(self, xml_path, message):
+        if not any((row.source_field or "").strip() == xml_path for row in self.field_mappings):
+            frappe.throw(message)
+
+    def _uses_delete_action(self):
+        for mapping in self.field_mappings:
+            if (mapping.source_field or "").strip() != "verwaltung_techn.aktion":
+                continue
+
+            candidate_values = [
+                mapping.get("static_value"),
+                mapping.get("default_value"),
+                mapping.get("value_mapping"),
+                mapping.get("expression_pattern"),
+            ]
+            if any("DELETE" in str(value or "").upper() for value in candidate_values):
+                return True
+
+        return False
+
     def _validate_target_doctype(self):
         """Validate target doctype exists"""
         if self.target_doctype and not frappe.db.exists("DocType", self.target_doctype):
