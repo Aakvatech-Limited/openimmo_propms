@@ -28,9 +28,23 @@ def build_property_data(source, record):
             continue
 
         value = apply_data_transformation(value, mapping, record_data)
+        value = _strip_prefix_for_export(value, mapping.get("export_strip_prefix"))
         mapped_data[xml_path] = value
 
     return mapped_data
+
+
+def _strip_prefix_for_export(value, prefix_to_strip):
+    prefix = (prefix_to_strip or "").strip()
+    if not prefix:
+        return value
+
+    if isinstance(value, str):
+        if "\n" in value:
+            return "\n".join(_strip_prefix_for_export(line, prefix) for line in value.splitlines())
+        if value.lower().startswith(prefix.lower()):
+            return value[len(prefix) :]
+    return value
 
 
 def _get_record_value(record_data, fieldname, root_doctype=None):
