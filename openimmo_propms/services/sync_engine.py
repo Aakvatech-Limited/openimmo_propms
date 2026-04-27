@@ -80,25 +80,33 @@ def execute_sync(source_name):
 
 
 def execute_scheduled_sync():
-    """Execute sync for all enabled sources with scheduled frequency"""
+    """Execute sync/export for all enabled non-manual sources based on frequency."""
     sources = frappe.get_all(
         "Integration Source",
         filters={
-            "operation_type": "Import",
             "enabled": 1,
-            "sync_frequency": ["!=", "Manual"]
+            "sync_frequency": ["!=", "Manual"],
+            "operation_type": ["in", ["Import", "Export"]],
         },
-        fields=["name", "sync_frequency"]
+        fields=["name", "sync_frequency", "operation_type"],
     )
     
     for source in sources:
         if _should_sync_now(source):
-            frappe.enqueue(
-                'openimmo_propms.services.sync_engine.execute_sync',
-                source_name=source.name,
-                queue='long',
-                timeout=3000
-            )
+            if source.operation_type == "Export":
+                frappe.enqueue(
+                    "openimmo_propms.services.export_engine.run_export",
+                    source_name=source.name,
+                    queue="long",
+                    timeout=3000,
+                )
+            else:
+                frappe.enqueue(
+                    "openimmo_propms.services.sync_engine.execute_sync",
+                    source_name=source.name,
+                    queue="long",
+                    timeout=3000,
+                )
 
 
 def _get_processor(source):
