@@ -235,6 +235,14 @@
   },
   {
    "depends_on": "eval:doc.operation_type=='Export'",
+   "description": "Optional JSON filters for export records. Example: {\"published\": 1} or [[\"status\", \"in\", [\"Published\", \"Active\"]]]",
+   "fieldname": "export_filters_json",
+   "fieldtype": "Code",
+   "label": "Export Filters (JSON)",
+   "options": "JSON"
+  },
+  {
+   "depends_on": "eval:doc.operation_type=='Export'",
    "description": "Property field that stores the image path or URL. Example: photo",
    "fieldname": "image_field",
    "fieldtype": "Data",

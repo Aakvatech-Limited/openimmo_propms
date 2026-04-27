@@ -65,6 +65,20 @@ class IntegrationSource(Document):
                     xml_path,
                     _("DELETE export requires a field mapping for {0}").format(xml_path),
                 )
+        self._validate_export_filters_json()
+
+    def _validate_export_filters_json(self):
+        filters_json = (self.export_filters_json or "").strip()
+        if not filters_json:
+            return
+
+        try:
+            parsed_filters = frappe.parse_json(filters_json)
+        except Exception:
+            frappe.throw(_("Export Filters (JSON) must be valid JSON"))
+
+        if not isinstance(parsed_filters, (dict, list)):
+            frappe.throw(_("Export Filters (JSON) must be a JSON object or list"))
 
     def _require_export_mapping(self, xml_path, message):
         if not any((row.source_field or "").strip() == xml_path for row in self.field_mappings):
