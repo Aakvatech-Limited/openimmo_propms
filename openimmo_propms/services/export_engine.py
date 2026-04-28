@@ -156,35 +156,66 @@ def _build_record_filename(source, index):
 
 
 def _get_records_for_export(source, params):
-    filters = {}
-    fieldnames = _get_requested_fieldnames(source)
+    filters = _get_configured_export_filters(source)
+    fieldnames = _sanitize_query_fields(_get_requested_fieldnames(source))
+    runtime_filters = {}
 
     if params.get("filter_company"):
-        filters[source.company_field or "company"] = params.get("filter_company")
+        runtime_filters[_get_required_filter_fieldname(source.company_field, _("Company Field"))] = params.get("filter_company")
 
     if params.get("property_name"):
-        filters[source.name_field or "name"] = params.get("property_name")
+        runtime_filters[_get_required_filter_fieldname(source.name_field, _("Name Field"))] = params.get("property_name")
 
     if params.get("filter_status"):
-        filters[source.status_field or "status"] = params.get("filter_status")
+        runtime_filters[_get_required_filter_fieldname(source.status_field, _("Status Field"))] = params.get("filter_status")
 
     if params.get("filter_publish") is not None:
-        publish_field = source.publish_field
-        if not publish_field:
-            frappe.throw(_("Publish filter requested but Publish Field is not configured"))
-        filters[publish_field] = cint(params.get("filter_publish"))
+        runtime_filters[_get_required_filter_fieldname(source.publish_field, _("Publish Field"))] = cint(params.get("filter_publish"))
 
-    records = frappe.get_all(
-        source.target_doctype,
-        filters=filters,
-        fields=fieldnames,
-        limit_page_length=0,
-    )
+    filters = _merge_filters(filters, runtime_filters)
 
-    if _requires_full_doc(source):
+    records, used_name_only_fallback = _get_all_records(source.target_doctype, filters, fieldnames)
+
+    if _requires_full_doc(source) or used_name_only_fallback:
         return [frappe.get_doc(source.target_doctype, record["name"]).as_dict() for record in records]
 
     return [frappe._dict(record) for record in records]
+
+
+def _get_configured_export_filters(source):
+    filters_json = (source.export_filters_json or "").strip()
+    if not filters_json:
+        return {}
+
+    parsed_filters = frappe.parse_json(filters_json)
+    if isinstance(parsed_filters, list):
+        return _normalize_list_filters(parsed_filters)
+    if isinstance(parsed_filters, dict):
+        return dict(parsed_filters)
+
+    frappe.throw(_("Export Filters (JSON) must be a JSON object or list"))
+
+
+def _merge_filters(configured_filters, runtime_filters):
+    if not runtime_filters:
+        return configured_filters
+
+    if isinstance(configured_filters, list):
+        merged_filters = list(configured_filters)
+        for fieldname, value in runtime_filters.items():
+            merged_filters.append([fieldname, "=", value])
+        return merged_filters
+
+    merged_filters = dict(configured_filters or {})
+    merged_filters.update(runtime_filters)
+    return merged_filters
+
+
+def _normalize_list_filters(filters):
+    normalized = list(filters or [])
+    if normalized and isinstance(normalized[0], str):
+        return [normalized]
+    return normalized
 
 
 def _build_xml_node(source, record, mapped_record):
@@ -249,7 +280,7 @@ def _get_requested_fieldnames(source):
     fieldnames = {"name"}
 
     for mapping in source.field_mappings:
-        fieldname = (mapping.target_field or "").strip()
+        fieldname = _get_configured_fieldname(mapping.target_field)
         if fieldname and "." not in fieldname:
             fieldnames.add(fieldname)
 
@@ -260,10 +291,67 @@ def _get_requested_fieldnames(source):
         source.publish_field,
         source.image_field,
     ]:
-        if configured_field and "." not in configured_field:
-            fieldnames.add(configured_field)
+        fieldname = _get_configured_fieldname(configured_field)
+        if fieldname and "." not in fieldname:
+            fieldnames.add(fieldname)
 
     return sorted(fieldnames)
+
+
+def _sanitize_query_fields(fieldnames):
+    cleaned = []
+    for fieldname in fieldnames or []:
+        text = str(fieldname).strip()
+        if text:
+            cleaned.append(text)
+    return cleaned
+
+
+def _get_all_records(doctype, filters, fieldnames):
+    try:
+        return (
+            frappe.get_all(
+                doctype,
+                filters=filters,
+                fields=fieldnames,
+                limit_page_length=0,
+            ),
+            False,
+        )
+    except TypeError as exc:
+        if "not iterable" not in str(exc):
+            raise
+
+        frappe.log_error(
+            message=(
+                f"TypeError in export get_all for {doctype}. "
+                f"fields={fieldnames!r}, filters={filters!r}, error={exc}"
+            ),
+            title="OpenImmo Export Query Fallback",
+        )
+
+        return (
+            frappe.get_all(
+                doctype,
+                filters=filters,
+                fields=["name"],
+                limit_page_length=0,
+            ),
+            True,
+        )
+
+
+def _get_configured_fieldname(value):
+    if not isinstance(value, str):
+        return ""
+    return value.strip()
+
+
+def _get_required_filter_fieldname(configured_value, label):
+    fieldname = _get_configured_fieldname(configured_value)
+    if not fieldname:
+        frappe.throw(_("{0} is required when corresponding runtime filter is used").format(label))
+    return fieldname
 
 
 def _requires_full_doc(source):

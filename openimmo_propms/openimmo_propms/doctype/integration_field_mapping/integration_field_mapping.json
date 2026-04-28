@@ -14,6 +14,7 @@
   "value_mapping",
   "expression_pattern",
   "default_value",
+  "export_strip_prefix",
   "target_mapping_section",
   "target_field",
   "column_break_target",
@@ -82,6 +83,12 @@
    "fieldname": "default_value",
    "fieldtype": "Data",
    "label": "Default Value"
+  },
+  {
+   "description": "Optional prefix removed only during export mapping for this row. Example: E-",
+   "fieldname": "export_strip_prefix",
+   "fieldtype": "Data",
+   "label": "Export Strip Prefix"
   },
   {
    "fieldname": "target_mapping_section",
