@@ -49,12 +49,6 @@ class IntegrationSource(Document):
         if self.source_type == "FTP" and self.ftp_transfer_enabled and not (self.ftp_host and self.ftp_username):
             frappe.throw(_("FTP Host and Username are required for FTP export delivery"))
 
-        if self.transfer_scope == "TEIL":
-            self._require_export_mapping(
-                "verwaltung_techn.aktion",
-                _("TEIL transfer requires a field mapping for verwaltung_techn.aktion"),
-            )
-
         if self._uses_delete_action():
             for xml_path in [
                 "verwaltung_techn.objektnr_intern",
@@ -85,6 +79,9 @@ class IntegrationSource(Document):
             frappe.throw(message)
 
     def _uses_delete_action(self):
+        if (self.transfer_mode or "").strip().upper() == "DELETE":
+            return True
+
         for mapping in self.field_mappings:
             if (mapping.source_field or "").strip() != "verwaltung_techn.aktion":
                 continue
