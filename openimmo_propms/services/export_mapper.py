@@ -31,6 +31,13 @@ def build_property_data(source, record):
         value = _strip_prefix_for_export(value, mapping.get("export_strip_prefix"))
         mapped_data[xml_path] = value
 
+    if (
+        (getattr(source, "transfer_scope", "") or "").strip().upper() == "TEIL"
+        and not mapped_data.get("verwaltung_techn.aktion")
+        and (getattr(source, "transfer_mode", "") or "").strip()
+    ):
+        mapped_data["verwaltung_techn.aktion"] = source.transfer_mode.strip().upper()
+
     return mapped_data
 
 
