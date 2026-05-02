@@ -240,22 +240,121 @@ def _build_record_blocks(source, export_records):
 
 
 def _append_image_attachment(source, record, immobilie):
-    image_field = (source.image_field or "").strip()
-    if not image_field:
-        return
-
-    image_value = record.get(image_field) if isinstance(record, dict) else None
-    image_url = _build_absolute_media_url(source, image_value)
-    if not image_url:
+    image_urls = _collect_image_urls(source, record)
+    if not image_urls:
         return
 
     import xml.etree.ElementTree as ET
 
     anhaenge = ET.SubElement(immobilie, "anhaenge")
-    anhang = ET.SubElement(anhaenge, "anhang")
-    ET.SubElement(anhang, "gruppe").text = source.image_group or "TITELBILD"
-    ET.SubElement(anhang, "location").text = source.image_location or "EXTERN"
-    ET.SubElement(anhang, "daten").text = image_url
+    for image_url in image_urls:
+        anhang = ET.SubElement(anhaenge, "anhang")
+        ET.SubElement(anhang, "gruppe").text = source.image_group or "TITELBILD"
+        ET.SubElement(anhang, "location").text = source.image_location or "EXTERN"
+        ET.SubElement(anhang, "daten").text = image_url
+
+
+def _collect_image_urls(source, record):
+    ordered_fields = [
+        source.image_field,
+        getattr(source, "child_image_field", None),
+        getattr(source, "parent_image_field", None),
+    ]
+
+    image_urls = []
+    seen_urls = set()
+    for fieldname in ordered_fields:
+        image_urls.extend(_resolve_image_urls(source, record, fieldname, seen_urls))
+
+    if image_urls:
+        return image_urls
+
+    return _resolve_image_urls(
+        source,
+        record,
+        getattr(source, "fallback_image_field", None),
+        seen_urls,
+    )
+
+
+def _resolve_image_urls(source, record, fieldname, seen_urls=None):
+    configured_field = (fieldname or "").strip()
+    if not configured_field:
+        return []
+
+    seen_urls = seen_urls or set()
+    image_values = _extract_path_values(record, configured_field, source.target_doctype)
+    image_urls = []
+
+    for image_value in image_values:
+        image_url = _build_absolute_media_url(source, image_value)
+        if not image_url or image_url in seen_urls:
+            continue
+        image_urls.append(image_url)
+        seen_urls.add(image_url)
+
+    return image_urls
+
+
+def _extract_path_values(record_data, fieldname, root_doctype=None):
+    if not isinstance(record_data, dict) or not fieldname:
+        return []
+
+    values = _resolve_path_values(record_data, fieldname.split("."), root_doctype)
+    return [value for value in values if value not in (None, "")]
+
+
+def _resolve_path_values(current, parts, current_doctype):
+    if not parts:
+        return _normalize_path_terminal(current)
+
+    part = parts[0]
+    remaining = parts[1:]
+
+    if isinstance(current, dict):
+        value = current.get(part)
+        if value is None:
+            return []
+
+        if isinstance(value, list):
+            child_doctype = _get_child_table_options(current_doctype, part)
+            resolved = []
+            for item in value:
+                resolved.extend(_resolve_path_values(item, remaining, child_doctype))
+            return resolved
+
+        if isinstance(value, dict):
+            return _resolve_path_values(value, remaining, None)
+
+        if remaining:
+            linked_doctype = _get_link_options(current_doctype, part)
+            if linked_doctype and value:
+                linked_doc = frappe.get_doc(linked_doctype, value).as_dict()
+                return _resolve_path_values(linked_doc, remaining, linked_doctype)
+            return []
+
+        return _normalize_path_terminal(value)
+
+    if isinstance(current, list):
+        resolved = []
+        for item in current:
+            resolved.extend(_resolve_path_values(item, parts, current_doctype))
+        return resolved
+
+    return []
+
+
+def _normalize_path_terminal(value):
+    if value in (None, ""):
+        return []
+
+    if isinstance(value, list):
+        normalized = []
+        for item in value:
+            normalized.extend(_normalize_path_terminal(item))
+        return normalized
+
+    return [value]
 
 
 def _build_absolute_media_url(source, image_value):
@@ -290,6 +389,9 @@ def _get_requested_fieldnames(source):
         source.status_field,
         source.publish_field,
         source.image_field,
+        getattr(source, "child_image_field", None),
+        getattr(source, "parent_image_field", None),
+        getattr(source, "fallback_image_field", None),
     ]:
         fieldname = _get_configured_fieldname(configured_field)
         if fieldname and "." not in fieldname:
@@ -355,11 +457,43 @@ def _get_required_filter_fieldname(configured_value, label):
 
 
 def _requires_full_doc(source):
+    for configured_field in [
+        source.image_field,
+        getattr(source, "child_image_field", None),
+        getattr(source, "parent_image_field", None),
+        getattr(source, "fallback_image_field", None),
+    ]:
+        fieldname = (configured_field or "").strip()
+        if fieldname and "." in fieldname:
+            return True
+
     for mapping in source.field_mappings:
         target_field = (mapping.target_field or "").strip()
         if target_field and "." in target_field:
             return True
     return False
+
+
+def _get_link_options(doctype_name, fieldname):
+    if not doctype_name:
+        return None
+
+    meta = frappe.get_meta(doctype_name)
+    field = meta.get_field(fieldname)
+    if field and field.fieldtype == "Link":
+        return field.options
+    return None
+
+
+def _get_child_table_options(doctype_name, fieldname):
+    if not doctype_name:
+        return None
+
+    meta = frappe.get_meta(doctype_name)
+    field = meta.get_field(fieldname)
+    if field and field.fieldtype == "Table":
+        return field.options
+    return None
 
 
 def _should_save_file(source, save_file):
