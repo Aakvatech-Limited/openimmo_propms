@@ -147,7 +147,7 @@
    "fieldname": "export_format",
    "fieldtype": "Select",
    "label": "Export Format",
-   "options": "OpenImmo"
+   "options": "OpenImmo\nImmowelt"
   },
   {
    "default": "TEIL",

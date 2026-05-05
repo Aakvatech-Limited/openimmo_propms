@@ -7,6 +7,7 @@ import ftplib
 from io import BytesIO
 
 from openimmo_propms.services.export_mapper import build_property_data
+from openimmo_propms.services.immowelt_xml_creator import build_immowelt_document
 from openimmo_propms.services.xml_builder import (
     build_openimmo_document,
     render_xml_template,
@@ -63,8 +64,8 @@ def _validate_export_source(source):
     if source.operation_type != "Export":
         frappe.throw(_("Integration Source must be configured for Export"))
 
-    if source.export_format != "OpenImmo":
-        frappe.throw(_("Only OpenImmo export is supported in this version"))
+    if source.export_format not in ("OpenImmo", "Immowelt"):
+        frappe.throw(_("Only OpenImmo and Immowelt export are supported in this version"))
 
     if not source.field_mappings:
         frappe.throw(_("Please configure at least one field mapping"))
@@ -72,7 +73,7 @@ def _validate_export_source(source):
     if not source.target_doctype:
         frappe.throw(_("Target DocType is required for export"))
 
-    if source.xml_template and "{{record_blocks}}" not in source.xml_template:
+    if source.export_format == "OpenImmo" and source.xml_template and "{{record_blocks}}" not in source.xml_template:
         frappe.throw(_("XML Template must include the {{record_blocks}} placeholder"))
 
 
@@ -108,6 +109,17 @@ def _build_export_documents(source, export_records, params):
 
 def _build_xml_content(source, export_records, params):
     anbieter_id = params.get("anbieter_id") or source.anbieter_id
+
+    if source.export_format == "Immowelt":
+        records = [record for record, mapped_record in export_records]
+        mapped_records = [mapped_record for record, mapped_record in export_records]
+        return _normalize_xml_document(
+            build_immowelt_document(
+                records,
+                mapped_records,
+                source=source,
+            )
+        )
 
     if source.xml_template:
         return _normalize_xml_document(
@@ -147,12 +159,16 @@ def _build_xml_hash(xml_content):
     return hashlib.sha256((xml_content or "").encode("utf-8")).hexdigest()
 
 
+def _export_format_slug(source):
+    return (source.export_format or "xml").lower().replace(" ", "_")
+
+
 def _build_batch_filename(source):
-    return f"{source.name.lower().replace(' ', '_')}_openimmo_export.xml"
+    return f"{source.name.lower().replace(' ', '_')}_{_export_format_slug(source)}_export.xml"
 
 
 def _build_record_filename(source, index):
-    return f"{source.name.lower().replace(' ', '_')}_openimmo_export_{index}.xml"
+    return f"{source.name.lower().replace(' ', '_')}_{_export_format_slug(source)}_export_{index}.xml"
 
 
 def _get_records_for_export(source, params):
@@ -377,10 +393,12 @@ def _build_absolute_media_url(source, image_value):
 
 def _get_requested_fieldnames(source):
     fieldnames = {"name"}
+    meta = frappe.get_meta(source.target_doctype)
+    valid_fields = {f.fieldname for f in meta.fields}
 
     for mapping in source.field_mappings:
         fieldname = _get_configured_fieldname(mapping.target_field)
-        if fieldname and "." not in fieldname:
+        if fieldname and "." not in fieldname and fieldname in valid_fields:
             fieldnames.add(fieldname)
 
     for configured_field in [
@@ -394,7 +412,7 @@ def _get_requested_fieldnames(source):
         getattr(source, "fallback_image_field", None),
     ]:
         fieldname = _get_configured_fieldname(configured_field)
-        if fieldname and "." not in fieldname:
+        if fieldname and "." not in fieldname and fieldname in valid_fields:
             fieldnames.add(fieldname)
 
     return sorted(fieldnames)
