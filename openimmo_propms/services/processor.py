@@ -71,7 +71,6 @@ def run_integration_engine(job_name):
 				error_title = f"Integration record failed: {str(e)}"[:135]
 				frappe.log_error(error_trace, error_title)
 
-		job.status = "Success" if job.failed_records == 0 else ("Failed" if job.successful_records == 0 else "Partially Completed")
 		job.processed_at = now_datetime()
 		job.log_message = frappe._("Processed {0} records. Success: {1}, Skipped: {2}, Failed: {3}").format(
 			job.total_records, job.successful_records, job.skipped_records, job.failed_records
