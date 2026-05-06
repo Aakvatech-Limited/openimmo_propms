@@ -16,6 +16,25 @@ class IntegrationJob(Document):
 		"""Standard validation hook."""
 		self._validate_file_extension()
 		self._set_file_name()
+		self.set_status()
+
+	def set_status(self):
+		"""
+		Derived status based on record counts.
+		Only updates if not currently 'Processing' and processing has occurred.
+		"""
+		if self.status == "Processing":
+			return
+
+		if not (self.successful_records or self.failed_records or self.skipped_records):
+			return
+
+		if self.successful_records > 0 and self.failed_records == 0 and self.skipped_records == 0:
+			self.status = "Success"
+		elif self.failed_records > 0 and self.successful_records == 0:
+			self.status = "Failed"
+		else:
+			self.status = "Partially Completed"
 
 	def _validate_file_extension(self):
 		"""Ensures only XML files are processed."""
