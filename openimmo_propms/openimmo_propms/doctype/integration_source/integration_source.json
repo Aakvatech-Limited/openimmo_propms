@@ -23,6 +23,7 @@
   "transfer_scope",
   "transfer_mode",
   "portal_name",
+  "regi_id",
   "anbieter_id",
   "save_file_by_default",
   "ftp_transfer_enabled",
@@ -170,6 +171,12 @@
    "fieldname": "portal_name",
    "fieldtype": "Data",
    "label": "Portal Name"
+  },
+  {
+   "depends_on": "eval:doc.operation_type=='Export'",
+   "fieldname": "regi_id",
+   "fieldtype": "Data",
+   "label": "Regi ID"
   },
   {
    "depends_on": "eval:doc.operation_type=='Export'",

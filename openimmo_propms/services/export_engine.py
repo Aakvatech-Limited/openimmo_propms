@@ -2,15 +2,21 @@ import frappe
 from frappe import _
 from frappe.utils import cint, get_url
 from frappe.utils.file_manager import save_file
+from copy import deepcopy
 import hashlib
 import ftplib
 from io import BytesIO
+from pathlib import Path
 
 from openimmo_propms.services.export_mapper import build_property_data
 from openimmo_propms.services.immowelt_xml_creator import build_immowelt_document
 from openimmo_propms.services.xml_builder import (
     build_openimmo_document,
     render_xml_template,
+)
+
+_OPENIMMO_TEMPLATE_PATH = (
+    Path(__file__).resolve().parents[1] / "templates" / "xml" / "openimmo-export.xml"
 )
 
 
@@ -135,6 +141,11 @@ def _build_xml_content(source, export_records, params):
             )
         )
 
+    if source.export_format == "OpenImmo":
+        return _normalize_xml_document(
+            _build_openimmo_template_document(source, export_records, anbieter_id)
+        )
+
     xml_nodes = [
         _build_xml_node(source, record, mapped_record)
         for record, mapped_record in export_records
@@ -253,6 +264,151 @@ def _build_record_blocks(source, export_records):
     for record, mapped_record in export_records:
         blocks.append(ET.tostring(_build_xml_node(source, record, mapped_record), encoding="unicode"))
     return "\n".join(blocks)
+
+
+def _build_openimmo_template_document(source, export_records, anbieter_id):
+    import xml.etree.ElementTree as ET
+
+    root = ET.fromstring(_OPENIMMO_TEMPLATE_PATH.read_text(encoding="utf-8"))
+    uebertragung = root.find("uebertragung")
+    if uebertragung is None:
+        uebertragung = ET.SubElement(root, "uebertragung")
+
+    uebertragung.set("umfang", source.transfer_scope or "")
+    uebertragung.set("modus", source.transfer_mode or "")
+    if source.portal_name:
+        uebertragung.set("portal", source.portal_name)
+    if getattr(source, "regi_id", None):
+        uebertragung.set("regi_id", str(source.regi_id))
+    else:
+        uebertragung.set("regi_id", "")
+
+    anbieter = root.find("anbieter")
+    if anbieter is None:
+        anbieter = ET.SubElement(root, "anbieter")
+
+    property_template = anbieter.find("immobilie")
+    property_index = list(anbieter).index(property_template) if property_template is not None else len(list(anbieter))
+
+    for child in list(anbieter):
+        if child.tag == "immobilie":
+            anbieter.remove(child)
+            continue
+        _reset_template_node(child)
+
+    _set_child_text(anbieter, "anbieternr", anbieter_id or "")
+    _set_child_text(anbieter, "firma", getattr(source, "provider_name", "") or "")
+
+    for record, mapped_record in export_records:
+        immobilie = _build_openimmo_property_node(source, record, mapped_record, property_template)
+        anbieter.insert(property_index, immobilie)
+        property_index += 1
+
+    return '<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(
+        root,
+        encoding="unicode",
+    )
+
+
+def _reset_template_node(node):
+    node.text = None
+    node.tail = None
+    for child in list(node):
+        _reset_template_node(child)
+
+
+def _set_child_text(parent, tag, value):
+    import xml.etree.ElementTree as ET
+
+    child = parent.find(tag)
+    if child is None:
+        child = ET.SubElement(parent, tag)
+    child.text = "" if value is None else str(value)
+
+
+def _build_openimmo_property_node(source, record, mapped_record, template_node):
+    import xml.etree.ElementTree as ET
+
+    from openimmo_propms.services.xml_builder import set_xml_value
+
+    immobilie = deepcopy(template_node) if template_node is not None else ET.Element("immobilie")
+    _reset_template_node(immobilie)
+
+    for xml_path, value in mapped_record.items():
+        set_xml_value(immobilie, xml_path, value)
+
+    _sync_openimmo_action_attribute(immobilie, mapped_record)
+    _populate_template_image_attachments(source, record, immobilie)
+    return immobilie
+
+
+def _sync_openimmo_action_attribute(immobilie, mapped_record):
+    if any(key.endswith("@aktionart") for key in mapped_record):
+        return
+
+    action_value = mapped_record.get("verwaltung_techn.aktion")
+    if action_value in (None, ""):
+        return
+
+    action_node = immobilie.find("./verwaltung_techn/aktion")
+    if action_node is not None:
+        action_node.set("aktionart", str(action_value))
+
+
+def _populate_template_image_attachments(source, record, immobilie):
+    import xml.etree.ElementTree as ET
+
+    image_urls = _collect_image_urls(source, record)
+    anhaenge = immobilie.find("anhaenge")
+
+    if anhaenge is None:
+        if not image_urls:
+            return
+        anhaenge = ET.SubElement(immobilie, "anhaenge")
+
+    template_anhang = anhaenge.find("anhang")
+    insert_index = 0
+    for index, child in enumerate(list(anhaenge)):
+        if child.tag == "anhang":
+            insert_index = index
+            break
+
+    for child in list(anhaenge):
+        if child.tag == "anhang":
+            anhaenge.remove(child)
+        else:
+            _reset_template_node(child)
+
+    if not image_urls:
+        return
+
+    if template_anhang is None:
+        template_anhang = ET.Element("anhang")
+        template_anhang.set("location", source.image_location or "EXTERN")
+        template_anhang.set("gruppe", source.image_group or "TITELBILD")
+        daten = ET.SubElement(template_anhang, "daten")
+        ET.SubElement(daten, "pfad")
+
+    for image_url in image_urls:
+        anhang = deepcopy(template_anhang)
+        _reset_template_node(anhang)
+
+        if source.image_location:
+            anhang.set("location", source.image_location)
+        if source.image_group:
+            anhang.set("gruppe", source.image_group)
+
+        pfad = anhang.find("./daten/pfad")
+        if pfad is not None:
+            pfad.text = image_url
+        else:
+            daten = anhang.find("daten")
+            if daten is None:
+                daten = ET.SubElement(anhang, "daten")
+            ET.SubElement(daten, "pfad").text = image_url
+
+        anhaenge.insert(insert_index, anhang)
+        insert_index += 1
 
 
 def _append_image_attachment(source, record, immobilie):
