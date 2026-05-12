@@ -14,11 +14,23 @@ def ensure_xml_path(parent, path):
 
 
 def set_xml_value(parent, path, value):
-    """Set a text value at a dotted XML path."""
+    """Set a text value or attribute at a dotted XML path."""
     if value is None or value == "":
         return
 
-    node = ensure_xml_path(parent, path)
+    attr_name = None
+    node_path = path
+    if "@" in path:
+        node_path, attr_name = path.rsplit("@", 1)
+        node_path = node_path.rstrip(".")
+        attr_name = attr_name.strip()
+
+    if attr_name:
+        node = ensure_xml_path(parent, node_path)
+        node.set(attr_name, str(value))
+        return
+
+    node = ensure_xml_path(parent, node_path)
     node.text = str(value)
 
 
