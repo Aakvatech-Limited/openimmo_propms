@@ -268,36 +268,53 @@ def _build_record_blocks(source, export_records):
 
 def _build_openimmo_template_document(source, export_records, anbieter_id):
     import xml.etree.ElementTree as ET
+    from frappe.utils import now_datetime
 
     root = ET.fromstring(_OPENIMMO_TEMPLATE_PATH.read_text(encoding="utf-8"))
+    
+    # 1. Fill <uebertragung>
     uebertragung = root.find("uebertragung")
-    if uebertragung is None:
-        uebertragung = ET.SubElement(root, "uebertragung")
+    if uebertragung is not None:
+        uebertragung.set("art", "ONLINE")
+        uebertragung.set("umfang", source.transfer_scope or "")
+        uebertragung.set("modus", source.transfer_mode or "")
+        uebertragung.set("version", "1.2.7")
+        uebertragung.set("sendersoftware", "OIGEN")
+        uebertragung.set("senderversion", "1.0")
+        uebertragung.set("timestamp", now_datetime().strftime("%Y-%m-%dT%H:%M:%S"))
+        if source.portal_name:
+            uebertragung.set("portal", source.portal_name)
+        if getattr(source, "regi_id", None):
+            uebertragung.set("regi_id", str(source.regi_id))
+            
+        # Remove leftover placeholders in attributes
+        keys_to_del = [k for k, v in uebertragung.attrib.items() if "{{" in str(v)]
+        for k in keys_to_del:
+            del uebertragung.attrib[k]
 
-    uebertragung.set("umfang", source.transfer_scope or "")
-    uebertragung.set("modus", source.transfer_mode or "")
-    if source.portal_name:
-        uebertragung.set("portal", source.portal_name)
-    if getattr(source, "regi_id", None):
-        uebertragung.set("regi_id", str(source.regi_id))
-    else:
-        uebertragung.set("regi_id", "")
-
+    # 2. Fill <anbieter>
     anbieter = root.find("anbieter")
-    if anbieter is None:
-        anbieter = ET.SubElement(root, "anbieter")
+    if anbieter is not None:
+        _set_child_text(anbieter, "anbieternr", anbieter_id or "")
+        _set_child_text(anbieter, "firma", getattr(source, "provider_name", "") or "")
+        
+        # Clean placeholders in other anbieter children (openimmo_anid, lizenzkennung etc)
+        for child in list(anbieter):
+            if child.tag != "immobilie":
+                if child.text and "{{" in child.text:
+                    child.text = ""
+                keys_to_del = [k for k, v in child.attrib.items() if "{{" in str(v)]
+                for k in keys_to_del:
+                    del child.attrib[k]
 
+    # 3. Handle <immobilie> blocks
     property_template = anbieter.find("immobilie")
     property_index = list(anbieter).index(property_template) if property_template is not None else len(list(anbieter))
 
+    # Remove all template property blocks before inserting real ones
     for child in list(anbieter):
         if child.tag == "immobilie":
             anbieter.remove(child)
-            continue
-        _reset_template_node(child)
-
-    _set_child_text(anbieter, "anbieternr", anbieter_id or "")
-    _set_child_text(anbieter, "firma", getattr(source, "provider_name", "") or "")
 
     for record, mapped_record in export_records:
         immobilie = _build_openimmo_property_node(source, record, mapped_record, property_template)
@@ -310,11 +327,23 @@ def _build_openimmo_template_document(source, export_records, anbieter_id):
     )
 
 
-def _reset_template_node(node):
-    node.text = None
-    node.tail = None
+def _reset_template_node(node, clear_attributes=True):
+    # Clear text and tail if they contain placeholders
+    if node.text and "{{" in str(node.text):
+        node.text = None
+    if node.tail and "{{" in str(node.tail):
+        node.tail = None
+
+    if clear_attributes:
+        node.attrib.clear()
+    else:
+        # Clear attributes with placeholders
+        keys_to_del = [k for k, v in node.attrib.items() if "{{" in str(v)]
+        for k in keys_to_del:
+            del node.attrib[k]
+            
     for child in list(node):
-        _reset_template_node(child)
+        _reset_template_node(child, clear_attributes=clear_attributes)
 
 
 def _set_child_text(parent, tag, value):
