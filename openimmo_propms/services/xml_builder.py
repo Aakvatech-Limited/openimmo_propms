@@ -18,6 +18,10 @@ def set_xml_value(parent, path, value):
     if value is None or value == "":
         return
 
+    # Standard OpenImmo booleans are lowercase "true" or "false"
+    if isinstance(value, bool):
+        value = "true" if value else "false"
+
     attr_name = None
     node_path = path
     if "@" in path:

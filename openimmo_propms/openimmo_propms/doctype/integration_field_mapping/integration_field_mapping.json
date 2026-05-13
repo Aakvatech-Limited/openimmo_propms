@@ -39,12 +39,11 @@
   },
   {
    "description": "Example: immobilie.geo.plz",
-   "depends_on": "eval:doc.source_value_type=='Field'",
    "fieldname": "source_field",
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Source Field (XML Path)",
-   "mandatory_depends_on": "eval:doc.source_value_type=='Field'"
+   "reqd": 1
   },
   {
    "depends_on": "eval:doc.source_value_type=='Static'",
