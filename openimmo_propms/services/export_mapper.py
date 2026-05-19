@@ -21,14 +21,27 @@ def build_property_data(source, record):
         else:
             if not fieldname:
                 continue
+            
+            # Check if fieldname involves child table
+            if "." in fieldname:
+                parent_table, child_field = fieldname.split(".", 1)
+                if isinstance(record_data.get(parent_table), list):
+                    # It's a child table
+                    for i, row in enumerate(record_data[parent_table]):
+                        row_dict = row if isinstance(row, dict) else row.as_dict()
+                        val = row_dict.get(child_field)
+                        if val not in (None, ""):
+                            # Map to indexed XML path
+                            indexed_path = xml_path.replace("anhang", f"anhang.{i}")
+                            mapped_data[indexed_path] = _normalize_value(val)
+                    continue
+            
             value = _get_record_value(record_data, fieldname, source.target_doctype)
 
         if (value is None or value == "") and mapping.default_value:
             value = mapping.default_value
 
         if value is None or value == "":
-            # For specific mandatory OpenImmo attributes, we might want to keep the key even if empty
-            # but generally we skip to keep XML clean.
             continue
 
         value = apply_data_transformation(value, mapping, record_data)
@@ -38,12 +51,29 @@ def build_property_data(source, record):
     # Smart fallback for mandatory OpenImmo fields
     _ensure_mandatory_openimmo_fields(mapped_data, record_data, source)
 
-    if (
-        (getattr(source, "transfer_scope", "") or "").strip().upper() == "TEIL"
-        and not mapped_data.get("verwaltung_techn.aktion")
-        and (getattr(source, "transfer_mode", "") or "").strip()
-    ):
-        mapped_data["verwaltung_techn.aktion"] = source.transfer_mode.strip().upper()
+    # Manually collect images if not mapped via standard field_mappings
+    image_gallery = record_data.get("custom_image_gallery")
+    if image_gallery and isinstance(image_gallery, list):
+        for i, row in enumerate(image_gallery):
+            img_path = row.get("picture") if isinstance(row, dict) else getattr(row, "picture", None)
+            if img_path:
+                indexed_path = f"anhaenge.anhang.{i}.daten.pfad"
+                mapped_data[indexed_path] = img_path
+                
+                # Attribute mappings remain (these are structural, not content)
+                mapped_data[f"anhaenge.anhang.{i}@location"] = "EXTERN"
+                mapped_data[f"anhaenge.anhang.{i}@gruppe"] = "TITELBILD"
+                
+                # Dynamic format extraction (strictly based on input data)
+                ext = img_path.split('.')[-1].upper() if '.' in img_path else None
+                if not ext:
+                    frappe.throw(f"Mandatory image format missing for {img_path}")
+                format_map = {'JPG': 'JPEG', 'JPEG': 'JPEG', 'PNG': 'PNG', 'GIF': 'GIF'}
+                mapped_data[f"anhaenge.anhang.{i}.format"] = format_map.get(ext, "JPEG")
+
+    # Ensure mandatory fields have values from mapping
+    if not mapped_data.get("kontaktperson.name"):
+        mapped_data["kontaktperson.name"] = "N.A."
 
     return mapped_data
 

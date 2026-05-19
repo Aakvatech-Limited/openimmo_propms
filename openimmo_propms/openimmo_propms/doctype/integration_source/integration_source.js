@@ -46,6 +46,10 @@ frappe.ui.form.on("Integration Source", {
 						freeze_message: __("Generating and uploading OpenImmo XML..."),
 						callback: (r) => {
 							if (!r.exc && r.message) {
+								let file_link = r.message.file_url 
+									? `<a href="${r.message.file_url}" target="_blank">${r.message.file_url}</a>` 
+									: __("Not saved");
+
 								frappe.msgprint({
 									title: __("Export Completed"),
 									message: __(
@@ -54,7 +58,7 @@ frappe.ui.form.on("Integration Source", {
 											r.message.record_count || 0,
 											r.message.delivery_status || __("Generated"),
 											r.message.delivery_channel || __("Manual"),
-											r.message.file_url || __("Not saved")
+											file_link
 										]
 									),
 									indicator: "green"
