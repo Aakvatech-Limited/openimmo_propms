@@ -1,15 +1,16 @@
 [project]
 name = "openimmo_propms"
+version = "0.0.2"
 authors = [
     { name = "Talib sheikh", email = "talibsheikh16@gmail.com"}
 ]
 description = "OpenImmo XML importer for automated property and applicant data integration"
 requires-python = ">=3.10"
 readme = "README.md"
-dynamic = ["version"]
 dependencies = [
     "xmltodict",
-    "requests"
+    "requests",
+    "lxml==6.1.0"
 ]
 
 [build-system]

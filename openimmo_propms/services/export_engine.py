@@ -14,6 +14,8 @@ from openimmo_propms.services.xml_builder import (
     build_openimmo_document,
     render_xml_template,
 )
+from openimmo_propms.services.xsd_builder import generate_xsd_based_xml
+from openimmo_propms.services.validator import validate_xml_against_xsd
 
 _OPENIMMO_TEMPLATE_PATH = (
     Path(__file__).resolve().parents[1] / "templates" / "xml" / "openimmo-export.xml"
@@ -27,8 +29,51 @@ def run_export(source_name, **kwargs):
 
     records = _get_records_for_export(source, kwargs)
     mapped_records = [build_property_data(source, record) for record in records]
-    export_records = list(zip(records, mapped_records))
-    documents = _build_export_documents(source, export_records, kwargs)
+    
+    # Inject transfer_mode into each record for dynamic Aktion mapping
+    transfer_mode = source.transfer_mode
+    if not transfer_mode:
+        frappe.throw("Mandatory field 'Transfer Mode' is missing in Integration Source configuration.")
+    for record in mapped_records:
+        record["verwaltung_techn.aktion"] = transfer_mode
+        record["verwaltung_techn.aktion@aktionart"] = transfer_mode
+        if not record.get("verwaltung_techn.openimmo_obid"):
+            record["verwaltung_techn.openimmo_obid"] = record.get("objektnr_intern", "NO-OBID")
+    
+    anbieter_id = kwargs.get("anbieter_id") or source.anbieter_id
+    
+    # Check if we should use XSD-driven generation
+    if source.export_format == "OpenImmo":
+        anbieter_context = {
+            "anbieter_id": anbieter_id,
+            "firma": getattr(source, "provider_name", "") or "My Company",
+            "openimmo_anid": getattr(source, "openimmo_anid", ""),
+            "portal_name": source.portal_name,
+            "transfer_scope": source.transfer_scope,
+            "transfer_mode": source.transfer_mode
+        }
+        
+        xml_content = generate_xsd_based_xml(
+            mapped_records,
+            anbieter_context
+        )
+        
+        # Validation as final check
+        is_valid, error_msg = validate_xml_against_xsd(xml_content, "openimmo_127c.xsd")
+        if not is_valid:
+             frappe.throw(_("Generated XML is not compliant with XSD: {0}").format(error_msg))
+             
+        # For simplicity in the existing batch flow, we pack it into a 'documents' list structure
+        # (Though XSD builder currently returns the whole doc, we adapt it)
+        documents = [{
+            "filename": _build_batch_filename(source),
+            "xml_content": _normalize_xml_document(xml_content),
+            "record_count": len(records),
+        }]
+    else:
+        export_records = list(zip(records, mapped_records))
+        documents = _build_export_documents(source, export_records, kwargs)
+
     should_save = _should_save_file(source, kwargs.get("save_file"))
     responses = []
 
@@ -246,11 +291,10 @@ def _normalize_list_filters(filters):
 
 
 def _build_xml_node(source, record, mapped_record):
-    import xml.etree.ElementTree as ET
-
+    from lxml import etree
     from openimmo_propms.services.xml_builder import set_xml_value
 
-    immobilie = ET.Element("immobilie")
+    immobilie = etree.Element("immobilie")
     for xml_path, value in mapped_record.items():
         set_xml_value(immobilie, xml_path, value)
     _append_image_attachment(source, record, immobilie)
@@ -258,19 +302,18 @@ def _build_xml_node(source, record, mapped_record):
 
 
 def _build_record_blocks(source, export_records):
-    import xml.etree.ElementTree as ET
-
+    from lxml import etree
     blocks = []
     for record, mapped_record in export_records:
-        blocks.append(ET.tostring(_build_xml_node(source, record, mapped_record), encoding="unicode"))
+        blocks.append(etree.tostring(_build_xml_node(source, record, mapped_record), encoding="unicode"))
     return "\n".join(blocks)
 
 
 def _build_openimmo_template_document(source, export_records, anbieter_id):
-    import xml.etree.ElementTree as ET
+    from lxml import etree
     from frappe.utils import now_datetime
 
-    root = ET.fromstring(_OPENIMMO_TEMPLATE_PATH.read_text(encoding="utf-8"))
+    root = etree.fromstring(_OPENIMMO_TEMPLATE_PATH.read_text(encoding="utf-8"))
     
     # 1. Fill <uebertragung>
     uebertragung = root.find("uebertragung")
@@ -321,10 +364,12 @@ def _build_openimmo_template_document(source, export_records, anbieter_id):
         anbieter.insert(property_index, immobilie)
         property_index += 1
 
-    return '<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(
+    return etree.tostring(
         root,
-        encoding="unicode",
-    )
+        pretty_print=True,
+        xml_declaration=True,
+        encoding="UTF-8"
+    ).decode("utf-8")
 
 
 def _reset_template_node(node, clear_attributes=True):
@@ -347,20 +392,19 @@ def _reset_template_node(node, clear_attributes=True):
 
 
 def _set_child_text(parent, tag, value):
-    import xml.etree.ElementTree as ET
+    from lxml import etree
 
     child = parent.find(tag)
     if child is None:
-        child = ET.SubElement(parent, tag)
+        child = etree.SubElement(parent, tag)
     child.text = "" if value is None else str(value)
 
 
 def _build_openimmo_property_node(source, record, mapped_record, template_node):
-    import xml.etree.ElementTree as ET
-
+    from lxml import etree
     from openimmo_propms.services.xml_builder import set_xml_value
 
-    immobilie = deepcopy(template_node) if template_node is not None else ET.Element("immobilie")
+    immobilie = deepcopy(template_node) if template_node is not None else etree.Element("immobilie")
     _reset_template_node(immobilie)
 
     for xml_path, value in mapped_record.items():
@@ -385,7 +429,7 @@ def _sync_openimmo_action_attribute(immobilie, mapped_record):
 
 
 def _populate_template_image_attachments(source, record, immobilie):
-    import xml.etree.ElementTree as ET
+    from lxml import etree
 
     image_urls = _collect_image_urls(source, record)
     anhaenge = immobilie.find("anhaenge")
@@ -393,7 +437,7 @@ def _populate_template_image_attachments(source, record, immobilie):
     if anhaenge is None:
         if not image_urls:
             return
-        anhaenge = ET.SubElement(immobilie, "anhaenge")
+        anhaenge = etree.SubElement(immobilie, "anhaenge")
 
     template_anhang = anhaenge.find("anhang")
     insert_index = 0
@@ -412,11 +456,11 @@ def _populate_template_image_attachments(source, record, immobilie):
         return
 
     if template_anhang is None:
-        template_anhang = ET.Element("anhang")
+        template_anhang = etree.Element("anhang")
         template_anhang.set("location", source.image_location or "EXTERN")
         template_anhang.set("gruppe", source.image_group or "TITELBILD")
-        daten = ET.SubElement(template_anhang, "daten")
-        ET.SubElement(daten, "pfad")
+        daten = etree.SubElement(template_anhang, "daten")
+        etree.SubElement(daten, "pfad")
 
     for image_url in image_urls:
         anhang = deepcopy(template_anhang)
@@ -433,8 +477,8 @@ def _populate_template_image_attachments(source, record, immobilie):
         else:
             daten = anhang.find("daten")
             if daten is None:
-                daten = ET.SubElement(anhang, "daten")
-            ET.SubElement(daten, "pfad").text = image_url
+                daten = etree.SubElement(anhang, "daten")
+            etree.SubElement(daten, "pfad").text = image_url
 
         anhaenge.insert(insert_index, anhang)
         insert_index += 1
@@ -445,14 +489,15 @@ def _append_image_attachment(source, record, immobilie):
     if not image_urls:
         return
 
-    import xml.etree.ElementTree as ET
+    from lxml import etree
 
-    anhaenge = ET.SubElement(immobilie, "anhaenge")
+    anhaenge = etree.SubElement(immobilie, "anhaenge")
     for image_url in image_urls:
-        anhang = ET.SubElement(anhaenge, "anhang")
-        ET.SubElement(anhang, "gruppe").text = source.image_group or "TITELBILD"
-        ET.SubElement(anhang, "location").text = source.image_location or "EXTERN"
-        ET.SubElement(anhang, "daten").text = image_url
+        anhang = etree.SubElement(anhaenge, "anhang")
+        etree.SubElement(anhang, "gruppe").text = source.image_group or "TITELBILD"
+        etree.SubElement(anhang, "location").text = source.image_location or "EXTERN"
+        daten = etree.SubElement(anhang, "daten")
+        etree.SubElement(daten, "pfad").text = image_url
 
 
 def _collect_image_urls(source, record):
