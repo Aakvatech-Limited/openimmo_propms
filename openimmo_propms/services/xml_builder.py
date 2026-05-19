@@ -1,16 +1,38 @@
-import xml.etree.ElementTree as ET
+# Copyright (c) 2025, Aakvatech and contributors
+# For license information, please see license.txt
+
+from lxml import etree
 import re
 
 
 def ensure_xml_path(parent, path):
-    """Create nested XML nodes for a dotted path and return the last node."""
+    """
+    Create nested XML nodes for a dotted path and return the last node.
+    Supports attributes via @ notation.
+    Example path: 'geo.land@iso_land'
+    """
     current = parent
-    for part in path.split("."):
+    parts = path.split(".")
+    
+    for i, part in enumerate(parts):
+        # Check if this part has an attribute
+        attr_name = None
+        if "@" in part:
+            part, attr_name = part.split("@")
+        
+        # Find or create child
         child = current.find(part)
         if child is None:
-            child = ET.SubElement(current, part)
+            child = etree.SubElement(current, part)
+        
         current = child
-    return current
+        
+        # If there's an attribute but more parts follow, it's a structural error in path
+        # but we handle it by just continuing. Usually @ is at the very end.
+        if attr_name and i == len(parts) - 1:
+            return current, attr_name
+            
+    return current, None
 
 
 def set_xml_value(parent, path, value):
@@ -22,20 +44,12 @@ def set_xml_value(parent, path, value):
     if isinstance(value, bool):
         value = "true" if value else "false"
 
-    attr_name = None
-    node_path = path
-    if "@" in path:
-        node_path, attr_name = path.rsplit("@", 1)
-        node_path = node_path.rstrip(".")
-        attr_name = attr_name.strip()
-
+    node, attr_name = ensure_xml_path(parent, path)
+    
     if attr_name:
-        node = ensure_xml_path(parent, node_path)
         node.set(attr_name, str(value))
-        return
-
-    node = ensure_xml_path(parent, node_path)
-    node.text = str(value)
+    else:
+        node.text = str(value)
 
 
 def build_openimmo_document(
@@ -44,52 +58,64 @@ def build_openimmo_document(
     portal_name=None,
     transfer_scope=None,
     transfer_mode=None,
+    version="1.2.7",
 ):
     """Build the fixed OpenImmo envelope around mapped property nodes."""
-    root = ET.Element("openimmo")
-    uebertragung = ET.SubElement(root, "uebertragung")
+    from frappe.utils import now_datetime
+
+    root = etree.Element("openimmo")
+    
+    # 1. uebertragung
+    uebertragung = etree.SubElement(root, "uebertragung")
+    uebertragung.set("art", "ONLINE")
     uebertragung.set("umfang", transfer_scope or "VOLL")
-    uebertragung.set("modus", transfer_mode or "NEW")
+    if transfer_mode:
+        uebertragung.set("modus", transfer_mode)
+    uebertragung.set("version", version)
+    uebertragung.set("sendersoftware", "OIGEN")
+    uebertragung.set("senderversion", "1.0")
+    uebertragung.set("timestamp", now_datetime().strftime("%Y-%m-%dT%H:%M:%S"))
     if portal_name:
         uebertragung.set("portal", portal_name)
 
-    anbieter = ET.SubElement(root, "anbieter")
-    ET.SubElement(anbieter, "anbieternr").text = str(anbieter_id)
+    # 2. anbieter
+    anbieter = etree.SubElement(root, "anbieter")
+    etree.SubElement(anbieter, "anbieternr").text = str(anbieter_id)
 
+    # 3. immobilie blocks
     for property_node in properties:
-        anbieter.append(property_node)
+        if isinstance(property_node, etree._Element):
+            anbieter.append(property_node)
+        else:
+            # If it's a string (rendered from template), we need to parse it
+            # This is less efficient but supports the old template way
+            try:
+                node = etree.fromstring(property_node)
+                anbieter.append(node)
+            except Exception:
+                pass
 
-    return '<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(
+    return etree.tostring(
         root,
-        encoding="unicode",
-    )
-
-
-def render_template(template, context, raw_keys=None):
-    """Replace {{key}} placeholders from a flat context dictionary."""
-    if not template:
-        return ""
-
-    raw_keys = set(raw_keys or [])
-
-    def replace(match):
-        key = match.group(1).strip()
-        value = context.get(key, "")
-        if key in raw_keys:
-            return "" if value is None else str(value)
-        return _escape_xml(value)
-
-    return re.sub(r"\{\{\s*([^}]+)\s*\}\}", replace, template)
-
-
-def render_property_template(property_template, mapped_data):
-    """Render one property block from the configured property template."""
-    return render_template(property_template, mapped_data)
+        pretty_print=True,
+        xml_declaration=True,
+        encoding="UTF-8"
+    ).decode("utf-8")
 
 
 def render_xml_template(xml_template, context):
-    """Render the full XML document from the configured XML template."""
-    return render_template(xml_template, context, raw_keys={"record_blocks"})
+    """
+    Render the full XML document from the configured XML template.
+    Note: For strict XSD, it's better to use build_openimmo_document with nodes.
+    """
+    # Simple replacement if we still want to use template strings
+    def replace(match):
+        key = match.group(1).strip()
+        value = context.get(key, "")
+        return _escape_xml(value)
+
+    rendered = re.sub(r"\{\{\s*([^}]+)\s*\}\}", replace, xml_template)
+    return rendered
 
 
 def _escape_xml(value):

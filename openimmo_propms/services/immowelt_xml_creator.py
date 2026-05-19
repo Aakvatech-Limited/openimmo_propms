@@ -160,7 +160,7 @@ def _append_address(expose, mapped_data):
         ("city", "kontaktperson.ort"),
         ("zip", "kontaktperson.plz"),
         ("street", "kontaktperson.strasse"),
-        ("contactperson", "kontaktperson.name"),
+        ("name", "kontaktperson.name"),
         ("salutation", "kontaktperson.anrede"),
         ("company", "anbieter.firma"),
         ("linktopartnerpage", "anbieter.homepage"),
