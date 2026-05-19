@@ -25,6 +25,7 @@
   "portal_name",
   "regi_id",
   "anbieter_id",
+  "openimmo_anid",
   "save_file_by_default",
   "ftp_transfer_enabled",
   "record_packaging",
@@ -159,12 +160,12 @@
    "options": "TEIL\nVOLL"
   },
   {
-   "default": "NEW",
+   "default": "CHANGE",
    "depends_on": "eval:doc.operation_type=='Export'",
    "fieldname": "transfer_mode",
    "fieldtype": "Select",
    "label": "Transfer Mode",
-   "options": "NEW\nCHANGE\nDELETE"
+   "options": "CHANGE\nDELETE\nREFERENZ"
   },
   {
    "depends_on": "eval:doc.operation_type=='Export'",
@@ -183,6 +184,12 @@
    "fieldname": "anbieter_id",
    "fieldtype": "Data",
    "label": "Anbieter ID"
+  },
+  {
+   "depends_on": "eval:doc.operation_type=='Export'",
+   "fieldname": "openimmo_anid",
+   "fieldtype": "Data",
+   "label": "OpenImmo ANID"
   },
   {
    "default": "1",
