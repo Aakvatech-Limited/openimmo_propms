@@ -116,18 +116,11 @@ class XSDDrivenBuilder:
     def _fill_group(self, node, group, data, prefix):
         """Processes a sequence or choice group."""
         if group.model == 'choice':
-            # Find first branch that has data
-            selected_branch = None
+            # Data-Driven selection: Only fill if data exists
             for branch in group:
                 if self._has_data_recursive(branch, data, prefix):
-                    selected_branch = branch
+                    self._fill_item(node, branch, data, prefix)
                     break
-            
-            if selected_branch:
-                self._fill_item(node, selected_branch, data, prefix)
-            elif group.min_occurs > 0:
-                # Mandatory choice, no data. Force first branch to maintain structure.
-                self._fill_item(node, group[0], data, prefix, force_mandatory=True)
         
         else: # sequence or all
             for item in group:
