@@ -1,4 +1,5 @@
 import frappe
+from frappe.utils import get_url
 
 from openimmo_propms.services.mapper import apply_data_transformation
 
@@ -33,7 +34,11 @@ def build_property_data(source, record):
                         if val not in (None, ""):
                             # Map to indexed XML path
                             indexed_path = xml_path.replace("anhang", f"anhang.{i}")
-                            mapped_data[indexed_path] = _normalize_value(val)
+                            mapped_data[indexed_path] = _normalize_export_value(
+                                source,
+                                indexed_path,
+                                val,
+                            )
                     continue
             
             value = _get_record_value(record_data, fieldname, source.target_doctype)
@@ -46,6 +51,7 @@ def build_property_data(source, record):
 
         value = apply_data_transformation(value, mapping, record_data)
         value = _strip_prefix_for_export(value, mapping.get("export_strip_prefix"))
+        value = _normalize_export_value(source, xml_path, value)
         mapped_data[xml_path] = value
 
     # Smart fallback for mandatory OpenImmo fields
@@ -58,7 +64,7 @@ def build_property_data(source, record):
             img_path = row.get("picture") if isinstance(row, dict) else getattr(row, "picture", None)
             if img_path:
                 indexed_path = f"anhaenge.anhang.{i}.daten.pfad"
-                mapped_data[indexed_path] = img_path
+                mapped_data[indexed_path] = _normalize_export_value(source, indexed_path, img_path)
                 
                 # Attribute mappings remain (these are structural, not content)
                 mapped_data[f"anhaenge.anhang.{i}@location"] = "EXTERN"
@@ -256,3 +262,33 @@ def _normalize_value(value):
         cleaned = [str(item) for item in value if item not in (None, "")]
         return "\n".join(cleaned) if cleaned else None
     return value
+
+
+def _normalize_export_value(source, xml_path, value):
+    normalized = _normalize_value(value)
+    if not _is_media_path_field(xml_path):
+        return normalized
+    return _build_absolute_media_url(source, normalized)
+
+
+def _is_media_path_field(xml_path):
+    path = (xml_path or "").strip()
+    return path == "pfad" or path.endswith(".pfad")
+
+
+def _build_absolute_media_url(source, image_value):
+    if not image_value:
+        return image_value
+
+    image_url = str(image_value).strip()
+    if not image_url:
+        return image_url
+
+    if image_url.startswith(("http://", "https://")):
+        return image_url
+
+    base_url = (getattr(source, "base_media_url", "") or "").strip() or get_url()
+    if not base_url:
+        return image_url
+
+    return "{0}/{1}".format(base_url.rstrip("/"), image_url.lstrip("/"))
