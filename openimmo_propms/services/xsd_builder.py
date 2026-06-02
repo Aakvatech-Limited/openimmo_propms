@@ -97,9 +97,14 @@ class XSDDrivenBuilder:
         if schema_element.type.is_simple() or schema_element.type.has_simple_content():
              val = data.get(prefix)
              
-             # Mandatory field 'stand_vom' needs a date
-             if schema_element.name == 'stand_vom' and (val in [None, ""]):
-                 val = nowdate()
+             # Mandatory field 'stand_vom' needs a date (YYYY-MM-DD)
+             if schema_element.name == 'stand_vom':
+                 from frappe.utils import getdate
+                 if val in [None, ""]:
+                     val = nowdate()
+                 else:
+                     # Ensure it's a date object (handles strings and datetime objects)
+                     val = getdate(val)
              
              if val not in [None, ""]:
                  node.text = self._format_value(val)
@@ -183,11 +188,6 @@ class XSDDrivenBuilder:
                 if parts[0].isdigit():
                     indices.add(int(parts[0]))
         return sorted(list(indices))
-
-    def _format_value(self, val):
-        if isinstance(val, bool):
-            return "true" if val else "false"
-        return str(val)
 
 def generate_xsd_based_xml(properties_data, anbieter_context, version="1.2.7"):
     builder = XSDDrivenBuilder()

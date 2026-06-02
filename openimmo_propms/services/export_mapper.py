@@ -124,8 +124,10 @@ def _ensure_mandatory_openimmo_fields(mapped_data, record_data, source):
             mapped_data["objektkategorie.vermarktungsart@KAUF"] = True
 
     # 3. Resolve Object Type (e.g., <wohnung />)
+    _resolve_property_type_from_record(mapped_data, record_data, source)
+
     has_type_tag = any(
-        key.startswith("objektkategorie.objektart.") and "@" not in key 
+        key.startswith("objektkategorie.objektart.")
         for key in mapped_data
     )
     
@@ -149,16 +151,68 @@ def _ensure_mandatory_openimmo_fields(mapped_data, record_data, source):
         elif any(w in type_hint for w in ["zimmer"]):
             mapped_data["objektkategorie.objektart.zimmer@zimmertyp"] = "ZIMMER"
         else:
-            mapped_data["objektkategorie.objektart.zusatz_erweit@objektart_standard"] = "SONSTIGE"
+            mapped_data["objektkategorie.objektart.sonstige@sonstige_typ"] = "SONSTIGES"
 
     # If 'objektart' text was mapped (like 'Apartment'), we usually want to clear it 
     # to avoid having both text AND sub-tags inside <objektart>, which is non-standard.
-    if has_type_tag or not mapped_data.get("objektkategorie.objektart.zusatz_erweit@objektart_standard") == "SONSTIGE":
+    if has_type_tag or not mapped_data.get("objektkategorie.objektart.sonstige@sonstige_typ") == "SONSTIGES":
         if "objektkategorie.objektart" in mapped_data:
             # Move the text to a more appropriate place or clear it
             if not mapped_data.get("freitexte.objekttitel"):
                 mapped_data["freitexte.objekttitel"] = mapped_data["objektkategorie.objektart"]
             del mapped_data["objektkategorie.objektart"]
+
+
+def _resolve_property_type_from_record(mapped_data, record_data, source):
+    """Fetch Property Type details and map to OpenImmo objektart."""
+    # Use erpnext_id from mapping if available, otherwise record name or custom_unit_id
+    erpnext_id = mapped_data.get("erpnext_id") or record_data.get("name") or record_data.get("custom_unit_id")
+    
+    property_type_name = record_data.get("custom_property_type")
+
+    if not property_type_name and erpnext_id and source.target_doctype:
+        # Try fetching from the actual record in the target doctype
+        property_type_name = frappe.db.get_value(
+            source.target_doctype, erpnext_id, "custom_property_type"
+        )
+        
+        # Fallback: maybe the ID is custom_unit_id as in user's example
+        if not property_type_name:
+            property_type_name = frappe.db.get_value(
+                source.target_doctype, 
+                {"custom_unit_id": erpnext_id}, 
+                "custom_property_type"
+            )
+
+    if not property_type_name:
+        return
+
+    try:
+        prop_type = frappe.get_cached_doc("Property Type", property_type_name)
+    except Exception:
+        # If it's a string name but doc doesn't exist by name, try getting by property_type_name field
+        prop_type_name = frappe.db.get_value("Property Type", {"property_type_name": property_type_name}, "name")
+        if prop_type_name:
+            prop_type = frappe.get_cached_doc("Property Type", prop_type_name)
+        else:
+            return
+
+    objektart = prop_type.get("openimmo_objektart")
+    attribute = prop_type.get("openimmo_attribute")
+    value = prop_type.get("openimmo_value")
+
+    if objektart:
+        # Clear any existing text mapping to objektart to avoid validation errors
+        if "objektkategorie.objektart" in mapped_data:
+            del mapped_data["objektkategorie.objektart"]
+
+        path = f"objektkategorie.objektart.{objektart}"
+        if attribute and value:
+            # Ensure value is uppercase for OpenImmo standards
+            mapped_data[f"{path}@{attribute}"] = str(value).upper()
+        else:
+            # Force tag creation (e.g. <wohnung />)
+            mapped_data[path] = ""
 
     # 4. Ensure some optional but helpful 'proper' tags exist
     if "objektkategorie.user_defined_simplefield@feldname" not in mapped_data:
