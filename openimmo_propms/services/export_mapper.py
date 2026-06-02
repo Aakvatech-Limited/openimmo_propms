@@ -57,6 +57,9 @@ def build_property_data(source, record):
     # Smart fallback for mandatory OpenImmo fields
     _ensure_mandatory_openimmo_fields(mapped_data, record_data, source)
 
+    # Automatically set nutzungsart attributes from Property Type master
+    _set_nutzungsart_attributes(mapped_data, record_data.get("custom_property_type"))
+
     # Manually collect images if not mapped via standard field_mappings
     image_gallery = record_data.get("custom_image_gallery")
     if image_gallery and isinstance(image_gallery, list):
@@ -319,10 +322,56 @@ def _normalize_value(value):
 
 
 def _normalize_export_value(source, xml_path, value):
+    # Fix for 'haustiere' boolean mapping
+    if "haustiere" in xml_path:
+        val_str = str(value).strip().lower()
+        if val_str in ["ja", "nach absprache", "1", "true", "yes"]:
+            return True
+        elif val_str in ["nein", "0", "false"]:
+            return False
+        else:
+            return None # Omit element if invalid
+
+    # Fix for 'moebliert' enumeration mapping
+    if "moebliert" in xml_path and "@moeb" in xml_path:
+        val_str = str(value).strip().lower()
+        if val_str in ["voll", "teil"]:
+            return val_str.upper()
+        elif val_str in ["1", "true", "yes", "checked", "on"]:
+            return "VOLL" 
+        else:
+            return None # Omit element if '0', 'false', or invalid/unchecked
+            
+    # Fix for 'heizungsart' and 'befeuerung' attribute mapping
+    if ("heizungsart" in xml_path or "befeuerung" in xml_path) and "@" in xml_path:
+        # If the attribute exists and has a value, it should be 'true'
+        val_str = str(value).strip().lower()
+        if val_str not in ["0", "false", "none", "", "no"]:
+            return "true"
+        return None # Omit attribute if false/0/no
+
     normalized = _normalize_value(value)
     if not _is_media_path_field(xml_path):
         return normalized
     return _build_absolute_media_url(source, normalized)
+
+def _set_nutzungsart_attributes(mapped_data, property_type_name):
+    """Fetches usage attributes from Property Type master and maps to XML."""
+    if not property_type_name:
+        return
+    
+    try:
+        # Fetch document from Property Type master
+        prop_type = frappe.get_cached_doc("Property Type", property_type_name)
+        
+        # Map XML attributes
+        mapped_data["objektkategorie.nutzungsart@WOHNEN"] = bool(prop_type.use_residential)
+        mapped_data["objektkategorie.nutzungsart@GEWERBE"] = bool(prop_type.use_commercial)
+        mapped_data["objektkategorie.nutzungsart@ANLAGE"] = bool(prop_type.use_investment)
+        mapped_data["objektkategorie.nutzungsart@WAZ"] = bool(prop_type.use_mixed)
+        
+    except Exception:
+        pass
 
 
 def _is_media_path_field(xml_path):
