@@ -147,41 +147,18 @@ def _ensure_mandatory_openimmo_fields(mapped_data, record_data, source):
     # 3. Resolve Object Type (e.g., <wohnung />)
     _resolve_property_type_from_record(mapped_data, record_data, source)
 
+    # Verify that an object type was mapped
     has_type_tag = any(
         key.startswith("objektkategorie.objektart.")
         for key in mapped_data
     )
     
     if not has_type_tag:
-        # Check both raw record and already mapped text in 'objektart'
-        type_hint = _normalize_value(
-            mapped_data.get("objektkategorie.objektart") or
-            record_data.get(source.name_field) or 
-            record_data.get("property_type") or 
-            record_data.get("type") or ""
-        ).lower()
+        frappe.log_error(f"Missing Property Type mapping for property: {record_data.get('name')}. Please configure the Property Type Master.")
 
-        if any(w in type_hint for w in ["flat", "apartment", "wohnung", "etage"]):
-            mapped_data["objektkategorie.objektart.wohnung@wohnungtyp"] = "ETAGE"
-        elif any(w in type_hint for w in ["house", "haus", "villa"]):
-            mapped_data["objektkategorie.objektart.haus@haustyp"] = "EINFAMILIENHAUS"
-        elif any(w in type_hint for w in ["office", "buero", "praxis", "laden", "shop"]):
-            mapped_data["objektkategorie.objektart.buero_praxen@buerotyp"] = "BUEROFLAECHE"
-        elif any(w in type_hint for w in ["garage", "stellplatz", "parking"]):
-            mapped_data["objektkategorie.objektart.parken@parken_typ"] = "STELLPLATZ"
-        elif any(w in type_hint for w in ["zimmer"]):
-            mapped_data["objektkategorie.objektart.zimmer@zimmertyp"] = "ZIMMER"
-        else:
-            mapped_data["objektkategorie.objektart.sonstige@sonstige_typ"] = "SONSTIGES"
-
-    # If 'objektart' text was mapped (like 'Apartment'), we usually want to clear it 
-    # to avoid having both text AND sub-tags inside <objektart>, which is non-standard.
-    if has_type_tag or not mapped_data.get("objektkategorie.objektart.sonstige@sonstige_typ") == "SONSTIGES":
-        if "objektkategorie.objektart" in mapped_data:
-            # Move the text to a more appropriate place or clear it
-            if not mapped_data.get("freitexte.objekttitel"):
-                mapped_data["freitexte.objekttitel"] = mapped_data["objektkategorie.objektart"]
-            del mapped_data["objektkategorie.objektart"]
+    # 4. Ensure some optional but helpful 'proper' tags exist
+    if "objektkategorie.user_defined_simplefield@feldname" not in mapped_data:
+        mapped_data["objektkategorie.user_defined_simplefield@feldname"] = ""
 
 
 def _resolve_property_type_from_record(mapped_data, record_data, source):
@@ -340,6 +317,16 @@ def _normalize_value(value):
 
 
 def _normalize_export_value(source, xml_path, value):
+    # Fix for 'anzahl_stellplaetze' positive integer constraint
+    if "anzahl_stellplaetze" in xml_path:
+        try:
+            val_int = int(float(value))
+            if val_int <= 0:
+                return None # Omit tag if 0 or less to pass XSD
+            return val_int
+        except (ValueError, TypeError):
+            return None
+
     # 31. Round all area fields up to next 5
     area_fields = [
         "wohnflaeche", "nutzflaeche", "gesamtflaeche", "ladenflaeche", 
