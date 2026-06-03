@@ -1,4 +1,5 @@
 import frappe
+import math
 from frappe.utils import get_url
 
 from openimmo_propms.services.mapper import apply_data_transformation
@@ -57,6 +58,9 @@ def build_property_data(source, record):
     # Smart fallback for mandatory OpenImmo fields
     _ensure_mandatory_openimmo_fields(mapped_data, record_data, source)
 
+    # 10b. Marketing Title Fallback Logic
+    _apply_marketing_title_fallback(mapped_data, record_data)
+
     # Automatically set nutzungsart attributes from Property Type master
     _set_nutzungsart_attributes(mapped_data, record_data.get("custom_property_type"))
 
@@ -85,6 +89,20 @@ def build_property_data(source, record):
         mapped_data["kontaktperson.name"] = "N.A."
 
     return mapped_data
+
+
+def _apply_marketing_title_fallback(mapped_data, record_data):
+    """Applies fallback chain: custom_marketing_title -> name1."""
+    # 1. Primary: If already mapped from custom_marketing_title, do nothing
+    if mapped_data.get("freitexte.objekttitel"):
+        return
+
+    # 2. Fallback: Try name1
+    title = record_data.get("name1")
+    
+    # Only assign if a title was found
+    if title:
+        mapped_data["freitexte.objekttitel"] = title
 
 
 def _ensure_mandatory_openimmo_fields(mapped_data, record_data, source):
@@ -322,6 +340,19 @@ def _normalize_value(value):
 
 
 def _normalize_export_value(source, xml_path, value):
+    # 31. Round all area fields up to next 5
+    area_fields = [
+        "wohnflaeche", "nutzflaeche", "gesamtflaeche", "ladenflaeche", 
+        "lagerflaeche", "verkaufsflaeche", "bueroflaeche", "kellerflaeche", 
+        "gartenflaeche", "balkon_terrasse_flaeche"
+    ]
+    if any(field in xml_path for field in area_fields):
+        try:
+            val_float = float(value)
+            return math.ceil(val_float / 5) * 5
+        except (ValueError, TypeError):
+            pass
+
     # Fix for 'haustiere' boolean mapping
     if "haustiere" in xml_path:
         val_str = str(value).strip().lower()
