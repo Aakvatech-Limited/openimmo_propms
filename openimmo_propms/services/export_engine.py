@@ -626,6 +626,11 @@ def _get_requested_fieldnames(source):
     meta = frappe.get_meta(source.target_doctype)
     valid_fields = {f.fieldname for f in meta.fields}
 
+    # Always try to fetch property type and unit ID for resolution
+    for field in ["custom_property_type", "custom_unit_id"]:
+        if field in valid_fields:
+            fieldnames.add(field)
+
     for mapping in source.field_mappings:
         fieldname = _get_configured_fieldname(mapping.target_field)
         if fieldname and "." not in fieldname and fieldname in valid_fields:

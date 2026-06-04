@@ -37,7 +37,7 @@ def ensure_xml_path(parent, path):
 
 def set_xml_value(parent, path, value):
     """Set a text value or attribute at a dotted XML path."""
-    if value is None or value == "":
+    if value is None:
         return
 
     # Standard OpenImmo booleans are lowercase "true" or "false"

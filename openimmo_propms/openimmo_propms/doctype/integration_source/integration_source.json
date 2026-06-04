@@ -387,6 +387,7 @@
    "label": "Field Mapping"
   },
   {
+   "allow_bulk_edit": 1,
    "fieldname": "field_mappings",
    "fieldtype": "Table",
    "label": "Field Mappings",
@@ -430,7 +431,7 @@
    "link_fieldname": "source_name"
   }
  ],
- "modified": "2026-05-02 10:20:23.772618",
+ "modified": "2026-06-03 11:14:55.523019",
  "modified_by": "Administrator",
  "module": "Openimmo Propms",
  "name": "Integration Source",
