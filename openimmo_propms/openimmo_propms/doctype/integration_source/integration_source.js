@@ -1,10 +1,12 @@
 frappe.ui.form.on("Integration Source", {
 	onload(frm) {
 		toggle_credential_fields(frm);
+		update_ftp_intro(frm);
 	},
 
 	refresh(frm) {
 		toggle_credential_fields(frm);
+		update_ftp_intro(frm);
 
 		if (frm.doc.source_type === "FTP") {
 			// 1. Connection Test Button
@@ -111,6 +113,10 @@ frappe.ui.form.on("Integration Source", {
 		}
 	},
 
+	ftp_transfer_enabled(frm) {
+		update_ftp_intro(frm);
+	},
+
 	source_type(frm) {
 		toggle_credential_fields(frm);
 	},
@@ -119,6 +125,22 @@ frappe.ui.form.on("Integration Source", {
 		toggle_credential_fields(frm);
 	},
 });
+
+function update_ftp_intro(frm) {
+	if (frm.doc.source_type !== "FTP") {
+		frm.set_intro(""); // Clear intro if not FTP
+		return;
+	}
+	
+	// Clear existing intro first to avoid duplication
+	frm.set_intro("");
+
+	if (frm.doc.ftp_transfer_enabled) {
+		frm.set_intro(__("Exporting will trigger FTP Transfer."), "green");
+	} else {
+		frm.set_intro(__("FTP Transfer is Disabled. Files will only be generated locally."), "red");
+	}
+}
 
 function toggle_credential_fields(frm) {
 	const is_import = frm.doc.operation_type === "Import";

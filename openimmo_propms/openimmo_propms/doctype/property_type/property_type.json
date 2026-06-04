@@ -1,0 +1,173 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 1,
+ "autoname": "field:property_type_name",
+ "creation": "2026-06-02 08:19:19.220638",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "property_type_name",
+  "parent_property_type",
+  "is_group",
+  "is_active",
+  "description",
+  "mapping_section",
+  "openimmo_objektart",
+  "openimmo_attribute",
+  "openimmo_value",
+  "immowelt_value",
+  "usage_section",
+  "use_residential",
+  "use_commercial",
+  "use_investment",
+  "use_mixed",
+  "lft",
+  "rgt",
+  "old_parent"
+ ],
+ "fields": [
+  {
+   "fieldname": "property_type_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Property Type Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "parent_property_type",
+   "fieldtype": "Link",
+   "label": "Parent Property Type",
+   "options": "Property Type"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_group",
+   "fieldtype": "Check",
+   "label": "Is Group"
+  },
+  {
+   "default": "1",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Is Active"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description"
+  },
+  {
+   "fieldname": "mapping_section",
+   "fieldtype": "Section Break",
+   "label": "Portal Mapping"
+  },
+  {
+   "fieldname": "openimmo_objektart",
+   "fieldtype": "Select",
+   "label": "OpenImmo Objektart",
+   "options": "\nzimmer\nwohnung\nhaus\ngrundstueck\nbuero_praxen\neinzelhandel\ngastgewerbe\nhallen_lager_prod\nland_und_forstwirtschaft\nparken\nsonstige\nfreizeitimmobilie_gewerblich\nzinshaus_renditeobjekt"
+  },
+  {
+   "fieldname": "openimmo_attribute",
+   "fieldtype": "Select",
+   "label": "OpenImmo Attribute",
+   "options": "\nzimmertyp\nwohnungtyp\nhaustyp\ngrundst_typ\nbuero_typ\nhandel_typ\ngastgew_typ\nhallen_typ\nland_typ\nparken_typ\nsonstige_typ\nfreizeit_typ\nzins_typ"
+  },
+  {
+   "fieldname": "openimmo_value",
+   "fieldtype": "Select",
+   "label": "OpenImmo Value",
+   "options": "\nZIMMER\nDACHGESCHOSS\nMAISONETTE\nLOFT-STUDIO-ATELIER\nPENTHOUSE\nTERRASSEN\nETAGE\nERDGESCHOSS\nSOUTERRAIN\nAPARTMENT\nFERIENWOHNUNG\nGALERIE\nROHDACHBODEN\nATTIKAWOHNUNG\nREIHENHAUS\nREIHENEND\nREIHENMITTEL\nREIHENECK\nDOPPELHAUSHAELFTE\nEINFAMILIENHAUS\nSTADTHAUS\nBUNGALOW\nVILLA\nRESTHOF\nBAUERNHAUS\nLANDHAUS\nSCHLOSS\nZWEIFAMILIENHAUS\nMEHRFAMILIENHAUS\nFERIENHAUS\nBERGHUETTE\nCHALET\nSTRANDHAUS\nLAUBE-DATSCHE-GARTENHAUS\nAPARTMENTHAUS\nBURG\nHERRENHAUS\nFINCA\nRUSTICO\nFERTIGHAUS\nWOHNEN\nGEWERBE\nINDUSTRIE\nLAND_FORSTWIRTSCHAFT\nFREIZEIT\nGEMISCHT\nGEWERBEPARK\nSONDERNUTZUNG\nSEELIEGENSCHAFT\nBUEROFLAECHE\nBUEROHAUS\nBUEROZENTRUM\nLOFT_ATELIER\nPRAXIS\nPRAXISFLAECHE\nPRAXISHAUS\nAUSSTELLUNGSFLAECHE\nCOWORKING\nSHARED_OFFICE\nLADENLOKAL\nEINZELHANDELSLADEN\nVERBRAUCHERMARKT\nEINKAUFSZENTRUM\nKAUFHAUS\nFACTORY_OUTLET\nKIOSK\nVERKAUFSFLAECHE\nGASTRONOMIE\nGASTRONOMIE_UND_WOHNUNG\nPENSIONEN\nHOTELS\nWEITERE_BEHERBERGUNGSBETRIEBE\nBAR\nCAFE\nDISCOTHEK\nRESTAURANT\nRAUCHERLOKAL\nEINRAUMLOKAL\nHALLE\nINDUSTRIEHALLE\nLAGER\nLAGERFLAECHEN\nLAGER_MIT_FREIFLAECHE\nHOCHREGALLAGER\nSPEDITIONSLAGER\nPRODUKTION\nWERKSTATT\nSERVICE\nFREIFLAECHEN\nKUEHLHAUS\nLANDWIRTSCHAFTLICHE_BETRIEBE\nBAUERNHOF\nAUSSIEDLERHOF\nGARTENBAU\nACKERBAU\nWEINBAU\nVIEHWIRTSCHAFT\nJAGD_UND_FORSTWIRTSCHAFT\nTEICH_UND_FISCHWIRTSCHAFT\nSCHEUNEN\nREITERHOEFE\nSONSTIGE_LANDWIRTSCHAFTSIMMOBILIEN\nANWESEN\nJAGDREVIER\nSTELLPLATZ\nCARPORT\nDOPPELGARAGE\nDUPLEX\nTIEFGARAGE\nBOOTSLIEGEPLATZ\nEINZELGARAGE\nPARKHAUS\nTIEFGARAGENSTELLPLATZ\nPARKPLATZ_STROM\nTANKSTELLE\nKRANKENHAUS\nSONSTIGE\nSPORTANLAGEN\nVERGNUEGUNGSPARKS_UND_CENTER\nFREIZEITANLAGE\nWOHN_UND_GESCHAEFTSHAUS\nGESCHAEFTSHAUS\nBUEROGEBAEUDE\nSB_MAERKTE\nEINKAUFSCENTREN\nWOHNANLAGEN\nVERBRAUCHERMAERKTE\nINDUSTRIEANLAGEN\nPFLEGEHEIM\nSANATORIUM\nSENIORENHEIM\nBETREUTES-WOHNEN\nKEINE_ANGABE"
+  },
+  {
+   "fieldname": "immowelt_value",
+   "fieldtype": "Data",
+   "label": "Immowelt Value"
+  },
+  {
+   "fieldname": "usage_section",
+   "fieldtype": "Section Break",
+   "label": "Usage Configuration"
+  },
+  {
+   "default": "0",
+   "fieldname": "use_residential",
+   "fieldtype": "Check",
+   "label": "Is Residential"
+  },
+  {
+   "default": "0",
+   "fieldname": "use_commercial",
+   "fieldtype": "Check",
+   "label": "Is Commercial"
+  },
+  {
+   "default": "0",
+   "fieldname": "use_investment",
+   "fieldtype": "Check",
+   "label": "Is Investment"
+  },
+  {
+   "default": "0",
+   "fieldname": "use_mixed",
+   "fieldtype": "Check",
+   "label": "Is Mixed"
+  },
+  {
+   "fieldname": "lft",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "Left",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "rgt",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "Right",
+   "no_copy": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "old_parent",
+   "fieldtype": "Link",
+   "label": "Old Parent",
+   "options": "Property Type"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "is_tree": 1,
+ "links": [],
+ "modified": "2026-06-02 09:34:22.258083",
+ "modified_by": "Administrator",
+ "module": "Openimmo Propms",
+ "name": "Property Type",
+ "naming_rule": "By fieldname",
+ "nsm_parent_field": "parent_property_type",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "property_type_name"
+}

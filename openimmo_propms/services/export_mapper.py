@@ -1,4 +1,6 @@
 import frappe
+import math
+from frappe.utils import get_url
 
 from openimmo_propms.services.mapper import apply_data_transformation
 
@@ -33,7 +35,11 @@ def build_property_data(source, record):
                         if val not in (None, ""):
                             # Map to indexed XML path
                             indexed_path = xml_path.replace("anhang", f"anhang.{i}")
-                            mapped_data[indexed_path] = _normalize_value(val)
+                            mapped_data[indexed_path] = _normalize_export_value(
+                                source,
+                                indexed_path,
+                                val,
+                            )
                     continue
             
             value = _get_record_value(record_data, fieldname, source.target_doctype)
@@ -46,10 +52,17 @@ def build_property_data(source, record):
 
         value = apply_data_transformation(value, mapping, record_data)
         value = _strip_prefix_for_export(value, mapping.get("export_strip_prefix"))
+        value = _normalize_export_value(source, xml_path, value)
         mapped_data[xml_path] = value
 
     # Smart fallback for mandatory OpenImmo fields
     _ensure_mandatory_openimmo_fields(mapped_data, record_data, source)
+
+    # 10b. Marketing Title Fallback Logic
+    _apply_marketing_title_fallback(mapped_data, record_data)
+
+    # Automatically set nutzungsart attributes from Property Type master
+    _set_nutzungsart_attributes(mapped_data, record_data.get("custom_property_type"))
 
     # Manually collect images if not mapped via standard field_mappings
     image_gallery = record_data.get("custom_image_gallery")
@@ -58,7 +71,7 @@ def build_property_data(source, record):
             img_path = row.get("picture") if isinstance(row, dict) else getattr(row, "picture", None)
             if img_path:
                 indexed_path = f"anhaenge.anhang.{i}.daten.pfad"
-                mapped_data[indexed_path] = img_path
+                mapped_data[indexed_path] = _normalize_export_value(source, indexed_path, img_path)
                 
                 # Attribute mappings remain (these are structural, not content)
                 mapped_data[f"anhaenge.anhang.{i}@location"] = "EXTERN"
@@ -76,6 +89,20 @@ def build_property_data(source, record):
         mapped_data["kontaktperson.name"] = "N.A."
 
     return mapped_data
+
+
+def _apply_marketing_title_fallback(mapped_data, record_data):
+    """Applies fallback chain: custom_marketing_title -> name1."""
+    # 1. Primary: If already mapped from custom_marketing_title, do nothing
+    if mapped_data.get("freitexte.objekttitel"):
+        return
+
+    # 2. Fallback: Try name1
+    title = record_data.get("name1")
+    
+    # Only assign if a title was found
+    if title:
+        mapped_data["freitexte.objekttitel"] = title
 
 
 def _ensure_mandatory_openimmo_fields(mapped_data, record_data, source):
@@ -118,41 +145,72 @@ def _ensure_mandatory_openimmo_fields(mapped_data, record_data, source):
             mapped_data["objektkategorie.vermarktungsart@KAUF"] = True
 
     # 3. Resolve Object Type (e.g., <wohnung />)
+    _resolve_property_type_from_record(mapped_data, record_data, source)
+
+    # Verify that an object type was mapped
     has_type_tag = any(
-        key.startswith("objektkategorie.objektart.") and "@" not in key 
+        key.startswith("objektkategorie.objektart.")
         for key in mapped_data
     )
     
     if not has_type_tag:
-        # Check both raw record and already mapped text in 'objektart'
-        type_hint = _normalize_value(
-            mapped_data.get("objektkategorie.objektart") or
-            record_data.get(source.name_field) or 
-            record_data.get("property_type") or 
-            record_data.get("type") or ""
-        ).lower()
+        frappe.log_error(f"Missing Property Type mapping for property: {record_data.get('name')}. Please configure the Property Type Master.")
 
-        if any(w in type_hint for w in ["flat", "apartment", "wohnung", "etage"]):
-            mapped_data["objektkategorie.objektart.wohnung@wohnungtyp"] = "ETAGE"
-        elif any(w in type_hint for w in ["house", "haus", "villa"]):
-            mapped_data["objektkategorie.objektart.haus@haustyp"] = "EINFAMILIENHAUS"
-        elif any(w in type_hint for w in ["office", "buero", "praxis", "laden", "shop"]):
-            mapped_data["objektkategorie.objektart.buero_praxen@buerotyp"] = "BUEROFLAECHE"
-        elif any(w in type_hint for w in ["garage", "stellplatz", "parking"]):
-            mapped_data["objektkategorie.objektart.parken@parken_typ"] = "STELLPLATZ"
-        elif any(w in type_hint for w in ["zimmer"]):
-            mapped_data["objektkategorie.objektart.zimmer@zimmertyp"] = "ZIMMER"
+    # 4. Ensure some optional but helpful 'proper' tags exist
+    if "objektkategorie.user_defined_simplefield@feldname" not in mapped_data:
+        mapped_data["objektkategorie.user_defined_simplefield@feldname"] = ""
+
+
+def _resolve_property_type_from_record(mapped_data, record_data, source):
+    """Fetch Property Type details and map to OpenImmo objektart."""
+    # Use erpnext_id from mapping if available, otherwise record name or custom_unit_id
+    erpnext_id = mapped_data.get("erpnext_id") or record_data.get("name") or record_data.get("custom_unit_id")
+    
+    property_type_name = record_data.get("custom_property_type")
+
+    if not property_type_name and erpnext_id and source.target_doctype:
+        # Try fetching from the actual record in the target doctype
+        property_type_name = frappe.db.get_value(
+            source.target_doctype, erpnext_id, "custom_property_type"
+        )
+        
+        # Fallback: maybe the ID is custom_unit_id as in user's example
+        if not property_type_name:
+            property_type_name = frappe.db.get_value(
+                source.target_doctype, 
+                {"custom_unit_id": erpnext_id}, 
+                "custom_property_type"
+            )
+
+    if not property_type_name:
+        return
+
+    try:
+        prop_type = frappe.get_cached_doc("Property Type", property_type_name)
+    except Exception:
+        # If it's a string name but doc doesn't exist by name, try getting by property_type_name field
+        prop_type_name = frappe.db.get_value("Property Type", {"property_type_name": property_type_name}, "name")
+        if prop_type_name:
+            prop_type = frappe.get_cached_doc("Property Type", prop_type_name)
         else:
-            mapped_data["objektkategorie.objektart.zusatz_erweit@objektart_standard"] = "SONSTIGE"
+            return
 
-    # If 'objektart' text was mapped (like 'Apartment'), we usually want to clear it 
-    # to avoid having both text AND sub-tags inside <objektart>, which is non-standard.
-    if has_type_tag or not mapped_data.get("objektkategorie.objektart.zusatz_erweit@objektart_standard") == "SONSTIGE":
+    objektart = prop_type.get("openimmo_objektart")
+    attribute = prop_type.get("openimmo_attribute")
+    value = prop_type.get("openimmo_value")
+
+    if objektart:
+        # Clear any existing text mapping to objektart to avoid validation errors
         if "objektkategorie.objektart" in mapped_data:
-            # Move the text to a more appropriate place or clear it
-            if not mapped_data.get("freitexte.objekttitel"):
-                mapped_data["freitexte.objekttitel"] = mapped_data["objektkategorie.objektart"]
             del mapped_data["objektkategorie.objektart"]
+
+        path = f"objektkategorie.objektart.{objektart}"
+        if attribute and value:
+            # Ensure value is uppercase for OpenImmo standards
+            mapped_data[f"{path}@{attribute}"] = str(value).upper()
+        else:
+            # Force tag creation (e.g. <wohnung />)
+            mapped_data[path] = ""
 
     # 4. Ensure some optional but helpful 'proper' tags exist
     if "objektkategorie.user_defined_simplefield@feldname" not in mapped_data:
@@ -256,3 +314,102 @@ def _normalize_value(value):
         cleaned = [str(item) for item in value if item not in (None, "")]
         return "\n".join(cleaned) if cleaned else None
     return value
+
+
+def _normalize_export_value(source, xml_path, value):
+    # Fix for 'anzahl_stellplaetze' positive integer constraint
+    if "anzahl_stellplaetze" in xml_path:
+        try:
+            val_int = int(float(value))
+            if val_int <= 0:
+                return None # Omit tag if 0 or less to pass XSD
+            return val_int
+        except (ValueError, TypeError):
+            return None
+
+    # 31. Round all area fields up to next 5
+    area_fields = [
+        "wohnflaeche", "nutzflaeche", "gesamtflaeche", "ladenflaeche", 
+        "lagerflaeche", "verkaufsflaeche", "bueroflaeche", "kellerflaeche", 
+        "gartenflaeche", "balkon_terrasse_flaeche"
+    ]
+    if any(field in xml_path for field in area_fields):
+        try:
+            val_float = float(value)
+            return math.ceil(val_float / 5) * 5
+        except (ValueError, TypeError):
+            pass
+
+    # Fix for 'haustiere' boolean mapping
+    if "haustiere" in xml_path:
+        val_str = str(value).strip().lower()
+        if val_str in ["ja", "nach absprache", "1", "true", "yes"]:
+            return True
+        elif val_str in ["nein", "0", "false"]:
+            return False
+        else:
+            return None # Omit element if invalid
+
+    # Fix for 'moebliert' enumeration mapping
+    if "moebliert" in xml_path and "@moeb" in xml_path:
+        val_str = str(value).strip().lower()
+        if val_str in ["voll", "teil"]:
+            return val_str.upper()
+        elif val_str in ["1", "true", "yes", "checked", "on"]:
+            return "VOLL" 
+        else:
+            return None # Omit element if '0', 'false', or invalid/unchecked
+            
+    # Fix for 'heizungsart' and 'befeuerung' attribute mapping
+    if ("heizungsart" in xml_path or "befeuerung" in xml_path) and "@" in xml_path:
+        # If the attribute exists and has a value, it should be 'true'
+        val_str = str(value).strip().lower()
+        if val_str not in ["0", "false", "none", "", "no"]:
+            return "true"
+        return None # Omit attribute if false/0/no
+
+    normalized = _normalize_value(value)
+    if not _is_media_path_field(xml_path):
+        return normalized
+    return _build_absolute_media_url(source, normalized)
+
+def _set_nutzungsart_attributes(mapped_data, property_type_name):
+    """Fetches usage attributes from Property Type master and maps to XML."""
+    if not property_type_name:
+        return
+    
+    try:
+        # Fetch document from Property Type master
+        prop_type = frappe.get_cached_doc("Property Type", property_type_name)
+        
+        # Map XML attributes
+        mapped_data["objektkategorie.nutzungsart@WOHNEN"] = bool(prop_type.use_residential)
+        mapped_data["objektkategorie.nutzungsart@GEWERBE"] = bool(prop_type.use_commercial)
+        mapped_data["objektkategorie.nutzungsart@ANLAGE"] = bool(prop_type.use_investment)
+        mapped_data["objektkategorie.nutzungsart@WAZ"] = bool(prop_type.use_mixed)
+        
+    except Exception:
+        pass
+
+
+def _is_media_path_field(xml_path):
+    path = (xml_path or "").strip()
+    return path == "pfad" or path.endswith(".pfad")
+
+
+def _build_absolute_media_url(source, image_value):
+    if not image_value:
+        return image_value
+
+    image_url = str(image_value).strip()
+    if not image_url:
+        return image_url
+
+    if image_url.startswith(("http://", "https://")):
+        return image_url
+
+    base_url = (getattr(source, "base_media_url", "") or "").strip() or get_url()
+    if not base_url:
+        return image_url
+
+    return "{0}/{1}".format(base_url.rstrip("/"), image_url.lstrip("/"))

@@ -8,7 +8,6 @@
   "source_configuration_section",
   "source_value_type",
   "source_field",
-  "static_value",
   "column_break_source",
   "transformation",
   "value_mapping",
@@ -17,6 +16,7 @@
   "export_strip_prefix",
   "target_mapping_section",
   "target_field",
+  "static_value",
   "column_break_target",
   "is_unique",
   "auto_create_link",
@@ -30,6 +30,7 @@
    "label": "Source Configuration"
   },
   {
+   "columns": 1,
    "default": "Field",
    "fieldname": "source_value_type",
    "fieldtype": "Select",
@@ -38,6 +39,7 @@
    "options": "Field\nStatic"
   },
   {
+   "columns": 2,
    "description": "Example: immobilie.geo.plz",
    "fieldname": "source_field",
    "fieldtype": "Data",
@@ -46,9 +48,11 @@
    "reqd": 1
   },
   {
+   "columns": 2,
    "depends_on": "eval:doc.source_value_type=='Static'",
    "fieldname": "static_value",
    "fieldtype": "Data",
+   "in_list_view": 1,
    "label": "Static Value",
    "mandatory_depends_on": "eval:doc.source_value_type=='Static'"
   },
@@ -95,6 +99,7 @@
    "label": "Target Mapping"
   },
   {
+   "columns": 2,
    "description": "Frappe fieldname (e.g. zip_code)",
    "fieldname": "target_field",
    "fieldtype": "Data",
@@ -110,14 +115,12 @@
    "default": "0",
    "fieldname": "is_unique",
    "fieldtype": "Check",
-   "in_list_view": 1,
    "label": "Is Unique (Duplicate Check)"
   },
   {
    "default": "0",
    "fieldname": "auto_create_link",
    "fieldtype": "Check",
-   "in_list_view": 1,
    "label": "Auto Create Link Record"
   },
   {
@@ -131,7 +134,6 @@
    "description": "Specific DocType to create the record in.",
    "fieldname": "link_target_doctype",
    "fieldtype": "Link",
-   "in_list_view": 1,
    "label": "Link Target DocType",
    "mandatory_depends_on": "eval:doc.auto_create_link == 1",
    "options": "DocType"
@@ -140,7 +142,7 @@
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-02-23 08:53:30.154407",
+ "modified": "2026-06-03 12:40:53.596880",
  "modified_by": "Administrator",
  "module": "Openimmo Propms",
  "name": "Integration Field Mapping",
