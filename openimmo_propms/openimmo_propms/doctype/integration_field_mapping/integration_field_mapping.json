@@ -16,6 +16,7 @@
   "export_strip_prefix",
   "target_mapping_section",
   "target_field",
+  "options",
   "static_value",
   "column_break_target",
   "is_unique",
@@ -106,6 +107,12 @@
    "in_list_view": 1,
    "label": "Target Field (Frappe)",
    "mandatory_depends_on": "eval:doc.source_value_type=='Field'"
+  },
+  {
+   "fieldname": "options",
+   "fieldtype": "Link",
+   "label": "Options",
+   "options": "DocType"
   },
   {
    "fieldname": "column_break_target",

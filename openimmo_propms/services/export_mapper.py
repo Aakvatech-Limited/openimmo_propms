@@ -42,7 +42,7 @@ def build_property_data(source, record):
                             )
                     continue
             
-            value = _get_record_value(record_data, fieldname, source.target_doctype)
+            value = _get_record_value(record_data, fieldname, source.target_doctype, mapping)
 
         if (value is None or value == "") and mapping.default_value:
             value = mapping.default_value
@@ -230,12 +230,12 @@ def _strip_prefix_for_export(value, prefix_to_strip):
     return value
 
 
-def _get_record_value(record_data, fieldname, root_doctype=None):
+def _get_record_value(record_data, fieldname, root_doctype=None, mapping=None):
     """Backward compatible wrapper."""
-    return _resolve_value(record_data, fieldname, root_doctype)
+    return _resolve_value(record_data, fieldname, root_doctype, mapping)
 
 
-def _resolve_value(record_data, fieldname, root_doctype):
+def _resolve_value(record_data, fieldname, root_doctype, mapping=None):
     current = record_data
     current_doctype = root_doctype
     parts = fieldname.split(".")
@@ -249,17 +249,25 @@ def _resolve_value(record_data, fieldname, root_doctype):
                 return _normalize_value(value)
 
             if isinstance(value, list):
-                return _resolve_list_values(value, remaining, current_doctype, part)
+                return _resolve_list_values(value, remaining, current_doctype, part, mapping)
 
             if isinstance(value, dict):
                 current = value
                 current_doctype = None
                 continue
 
+            # Link field resolution
+            link_doctype = None
             link_meta = _get_link_meta(current_doctype, part)
-            if link_meta and value:
-                current = frappe.get_doc(link_meta.options, value).as_dict()
-                current_doctype = link_meta.options
+            if link_meta:
+                link_doctype = link_meta.options
+            elif index == 0 and mapping and mapping.get("options"):
+                # Use explicit Options from mapping for the first level
+                link_doctype = mapping.options
+
+            if link_doctype and value:
+                current = frappe.get_doc(link_doctype, value).as_dict()
+                current_doctype = link_doctype
                 continue
 
             current = value
@@ -270,14 +278,14 @@ def _resolve_value(record_data, fieldname, root_doctype):
     return _normalize_value(current)
 
 
-def _resolve_list_values(items, remaining_parts, current_doctype, fieldname):
+def _resolve_list_values(items, remaining_parts, current_doctype, fieldname, mapping=None):
     values = []
     child_doctype = _get_child_table_options(current_doctype, fieldname)
     subpath = ".".join(remaining_parts)
 
     for item in items:
         if isinstance(item, dict):
-            resolved = _resolve_value(item, subpath, child_doctype)
+            resolved = _resolve_value(item, subpath, child_doctype, mapping)
             if resolved not in (None, ""):
                 values.append(resolved)
 
