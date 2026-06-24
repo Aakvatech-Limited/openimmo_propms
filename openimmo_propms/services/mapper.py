@@ -41,7 +41,7 @@ def map_external_data_to_doctype(source_name, entry_data):
 			# 2. Type Casting and Special Handling for Link Fields
 			value = cast_value_to_fieldtype(value, df, mapping.auto_create_link, mapping.link_target_doctype)
 			
-			if value:
+			if value is not None and value != "":
 				target_doc.set(mapping.target_field, value)
 			elif df.reqd:
 				raise Exception(frappe._("Link validation failed for mandatory field {0}: '{1}' not found").format(
@@ -59,7 +59,7 @@ def map_external_data_to_doctype(source_name, entry_data):
 def get_duplicate_record_id(doc, source):
 	"""Checks if a record with unique mapping already exists and returns its ID."""
 	unique_field = next((m.target_field for m in source.field_mappings if m.is_unique), None)
-	if unique_field and doc.get(unique_field):
+	if unique_field and doc.get(unique_field) is not None and doc.get(unique_field) != "":
 		return frappe.db.exists(source.target_doctype, {unique_field: doc.get(unique_field)})
 	return None
 
@@ -107,16 +107,16 @@ def find_recursively(data, target_key):
 
 def apply_data_transformation(value, mapping, entry_data=None):
 	"""Applies standard string transformations or custom expressions."""
-	if not value: return value
+	if value is None or value == "": return value
 	
 	transform_type = mapping.transformation
 	
-	if transform_type == "Upper Case": return str(value).upper()
-	if transform_type == "Lower Case": return str(value).lower()
-	if transform_type == "Title Case": return str(value).title()
-	if transform_type == "Integer": return cint(value)
-	if transform_type == "Float": return flt(value)
-	if transform_type == "Expression" and mapping.get("expression_pattern"):
+	if transform_type == "Upper Case": value = str(value).upper()
+	elif transform_type == "Lower Case": value = str(value).lower()
+	elif transform_type == "Title Case": value = str(value).title()
+	elif transform_type == "Integer": value = cint(value)
+	elif transform_type == "Float": value = flt(value)
+	elif transform_type == "Expression" and mapping.get("expression_pattern"):
 		value = evaluate_expression(mapping.expression_pattern, value, entry_data)
 
 	return apply_value_mapping(value, mapping.get("value_mapping"))
@@ -183,7 +183,7 @@ def cast_value_to_fieldtype(value, df, auto_create_link=False, link_target_docty
 	Handles Link fields by checking/creating the linked record.
 	"""
 	fieldtype = df.fieldtype
-	if not value: return value
+	if value is None or value == "": return value
 
 	if fieldtype in ["Int", "Check"]:
 		return cint(value)
@@ -201,7 +201,7 @@ def handle_link_field(value, link_doctype, auto_create=False):
 	Checks if a value exists in the linked DocType.
 	Creates it if missing and 'auto_create' is enabled.
 	"""
-	if not value or not link_doctype:
+	if value is None or value == "" or not link_doctype:
 		return None
 
 	# Check if record exists
