@@ -43,7 +43,7 @@ def run_export(source_name, **kwargs):
     anbieter_id = kwargs.get("anbieter_id") or source.anbieter_id
     
     # Check if we should use XSD-driven generation
-    if source.export_format == "OpenImmo":
+    if source.export_format == "OpenImmo" and not getattr(source, "use_jinja_template", 0):
         anbieter_context = {
             "anbieter_id": anbieter_id,
             "firma": getattr(source, "provider_name", "") or "My Company",
@@ -73,6 +73,13 @@ def run_export(source_name, **kwargs):
     else:
         export_records = list(zip(records, mapped_records))
         documents = _build_export_documents(source, export_records, kwargs)
+        
+        # Validate Jinja-rendered OpenImmo XML against XSD
+        if source.export_format == "OpenImmo" and getattr(source, "use_jinja_template", 0):
+            for document in documents:
+                is_valid, error_msg = validate_xml_against_xsd(document["xml_content"], "openimmo_127c.xsd")
+                if not is_valid:
+                    frappe.throw(_("Generated XML is not compliant with XSD: {0}").format(error_msg))
 
     should_save = _should_save_file(source, kwargs.get("save_file"))
     responses = []
@@ -118,13 +125,13 @@ def _validate_export_source(source):
     if source.export_format not in ("OpenImmo", "Immowelt"):
         frappe.throw(_("Only OpenImmo and Immowelt export are supported in this version"))
 
-    if not source.field_mappings:
+    if not source.field_mappings and not getattr(source, "use_jinja_template", 0):
         frappe.throw(_("Please configure at least one field mapping"))
 
     if not source.target_doctype:
         frappe.throw(_("Target DocType is required for export"))
 
-    if source.export_format == "OpenImmo" and source.xml_template and "{{record_blocks}}" not in source.xml_template:
+    if source.export_format == "OpenImmo" and not getattr(source, "use_jinja_template", 0) and source.xml_template and "{{record_blocks}}" not in source.xml_template:
         frappe.throw(_("XML Template must include the {{record_blocks}} placeholder"))
 
 
@@ -160,6 +167,10 @@ def _build_export_documents(source, export_records, params):
 
 def _build_xml_content(source, export_records, params):
     anbieter_id = params.get("anbieter_id") or source.anbieter_id
+
+    # Jinja template path - takes precedence when enabled (Notification-style rendering)
+    if getattr(source, "use_jinja_template", 0) and source.xml_template:
+        return _build_jinja_xml(source, export_records, params)
 
     if source.export_format == "Immowelt":
         records = [record for record, mapped_record in export_records]
@@ -204,6 +215,61 @@ def _build_xml_content(source, export_records, params):
             transfer_mode=source.transfer_mode,
         )
     )
+
+
+def _build_jinja_xml(source, export_records, params):
+    """Render XML using Jinja template (same pattern as Notification DocType).
+
+    Uses frappe.render_template() which is already available globally.
+    Template context provides: doc, mapped, source, frappe.
+
+    For batch mode: template receives all_records list and loops internally.
+    For single mode: template receives doc (single record).
+    """
+    if source.record_packaging == "Separate XML per Record":
+        # Each record rendered separately - template gets single doc
+        parts = []
+        for record, mapped_record in export_records:
+            _validate_single_hero_image(record)
+            context = {
+                "doc": record,
+                "mapped": mapped_record,
+                "source": source,
+                "frappe": frappe,
+            }
+            parts.append(frappe.render_template(source.xml_template, context))
+        return "\n".join(parts)
+
+    # Batch mode - template gets all_records list for looping
+    all_records = []
+    for record, mapped_record in export_records:
+        _validate_single_hero_image(record)
+        all_records.append({"doc": record, "mapped": mapped_record})
+
+    context = {
+        "all_records": all_records,
+        "source": source,
+        "frappe": frappe,
+    }
+    return _normalize_xml_document(frappe.render_template(source.xml_template, context))
+
+
+def _validate_single_hero_image(record):
+    """Server-side validation: max 1 is_hero_image per property."""
+    gallery = record.get("custom_image_gallery") or []
+    if not isinstance(gallery, list):
+        return
+
+    hero_count = sum(
+        1 for img in gallery
+        if (img.get("is_hero_image") if isinstance(img, dict) else getattr(img, "is_hero_image", 0)) == 1
+    )
+    if hero_count > 1:
+        frappe.throw(
+            _("Property {0}: Only 1 hero image allowed, found {1} with is_hero_image=1").format(
+                record.get("name", "Unknown"), hero_count
+            )
+        )
 
 
 def _normalize_xml_document(xml_content):
@@ -313,7 +379,7 @@ def _build_openimmo_template_document(source, export_records, anbieter_id):
     from lxml import etree
     from frappe.utils import now_datetime
 
-    root = etree.fromstring(_OPENIMMO_TEMPLATE_PATH.read_text(encoding="utf-8"))
+    root = etree.fromstring(_OPENIMMO_TEMPLATE_PATH.read_bytes())
     
     # 1. Fill <uebertragung>
     uebertragung = root.find("uebertragung")

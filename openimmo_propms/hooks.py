@@ -74,10 +74,14 @@ doctype_list_js = {"CRM Lead" : "public/js/crm_lead_list.js"}
 # ----------
 
 # add methods and filters to jinja environment
-# jinja = {
-# 	"methods": "openimmo_propms.utils.jinja_methods",
-# 	"filters": "openimmo_propms.utils.jinja_filters"
-# }
+jinja = {
+	"methods": [
+		"openimmo_propms.utils.jinja_methods.format_immowelt_date",
+		"openimmo_propms.utils.jinja_methods.format_decimal",
+		"openimmo_propms.utils.jinja_methods.get_document",
+		"openimmo_propms.utils.jinja_methods.get_value",
+	],
+}
 
 # Installation
 # ------------

@@ -20,24 +20,33 @@
   "sync_frequency",
   "section_break_export",
   "export_format",
+  "use_jinja_template",
   "transfer_scope",
   "transfer_mode",
+  "record_packaging",
   "portal_name",
   "regi_id",
   "anbieter_id",
   "openimmo_anid",
+  "column_break_export_1",
   "save_file_by_default",
   "ftp_transfer_enabled",
-  "record_packaging",
-  "xml_template",
   "name_field",
   "company_field",
   "status_field",
   "publish_field",
+  "section_break_media",
   "image_field",
+  "child_image_field",
+  "parent_image_field",
+  "fallback_image_field",
+  "column_break_media_1",
   "image_group",
   "image_location",
   "base_media_url",
+  "section_break_xml_template",
+  "xml_template",
+  "export_filters_json",
   "section_break_creds",
   "email_account",
   "email_folder",
@@ -56,11 +65,7 @@
   "last_sync_at",
   "status",
   "column_break_status",
-  "last_sync_status",
-  "export_filters_json",
-  "child_image_field",
-  "parent_image_field",
-  "fallback_image_field"
+  "last_sync_status"
  ],
  "fields": [
   {
@@ -94,15 +99,15 @@
    "reqd": 1
   },
   {
-   "fieldname": "column_break_general",
-   "fieldtype": "Column Break"
-  },
-  {
    "default": "0",
    "fieldname": "enabled",
    "fieldtype": "Check",
    "in_list_view": 1,
    "label": "Enabled"
+  },
+  {
+   "fieldname": "column_break_general",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "provider_name",
@@ -152,6 +157,14 @@
    "options": "OpenImmo\nImmowelt"
   },
   {
+   "default": "0",
+   "depends_on": "eval:doc.operation_type=='Export'",
+   "description": "Enable Jinja templating for dynamic XML generation",
+   "fieldname": "use_jinja_template",
+   "fieldtype": "Check",
+   "label": "Use Jinja Template"
+  },
+  {
    "default": "TEIL",
    "depends_on": "eval:doc.operation_type=='Export'",
    "fieldname": "transfer_scope",
@@ -166,6 +179,14 @@
    "fieldtype": "Select",
    "label": "Transfer Mode",
    "options": "CHANGE\nDELETE\nREFERENZ"
+  },
+  {
+   "default": "Single XML for All Records",
+   "depends_on": "eval:doc.operation_type=='Export'",
+   "fieldname": "record_packaging",
+   "fieldtype": "Select",
+   "label": "Record Packaging",
+   "options": "Single XML for All Records\nSeparate XML per Record"
   },
   {
    "depends_on": "eval:doc.operation_type=='Export'",
@@ -192,6 +213,11 @@
    "label": "OpenImmo ANID"
   },
   {
+   "depends_on": "eval:doc.operation_type=='Export'",
+   "fieldname": "column_break_export_1",
+   "fieldtype": "Column Break"
+  },
+  {
    "default": "1",
    "depends_on": "eval:doc.operation_type=='Export'",
    "fieldname": "save_file_by_default",
@@ -204,21 +230,6 @@
    "fieldname": "ftp_transfer_enabled",
    "fieldtype": "Check",
    "label": "Enable FTP Transfer"
-  },
-  {
-   "default": "Single XML for All Records",
-   "depends_on": "eval:doc.operation_type=='Export'",
-   "fieldname": "record_packaging",
-   "fieldtype": "Select",
-   "label": "Record Packaging",
-   "options": "Single XML for All Records\nSeparate XML per Record"
-  },
-  {
-   "depends_on": "eval:doc.operation_type=='Export'",
-   "fieldname": "xml_template",
-   "fieldtype": "Code",
-   "label": "XML Template",
-   "options": "XML"
   },
   {
    "default": "name",
@@ -253,11 +264,9 @@
   },
   {
    "depends_on": "eval:doc.operation_type=='Export'",
-   "description": "Optional JSON filters for export records. Example: {\"published\": 1} or [[\"status\", \"in\", [\"Published\", \"Active\"]]]",
-   "fieldname": "export_filters_json",
-   "fieldtype": "Code",
-   "label": "Export Filters (JSON)",
-   "options": "JSON"
+   "fieldname": "section_break_media",
+   "fieldtype": "Section Break",
+   "label": "Media Settings"
   },
   {
    "depends_on": "eval:doc.operation_type=='Export'",
@@ -288,6 +297,11 @@
    "label": "Fallback Image Field"
   },
   {
+   "depends_on": "eval:doc.operation_type=='Export'",
+   "fieldname": "column_break_media_1",
+   "fieldtype": "Column Break"
+  },
+  {
    "default": "TITELBILD",
    "depends_on": "eval:doc.operation_type=='Export' && (doc.image_field || doc.child_image_field || doc.parent_image_field || doc.fallback_image_field)",
    "fieldname": "image_group",
@@ -307,6 +321,27 @@
    "fieldname": "base_media_url",
    "fieldtype": "Data",
    "label": "Base Media URL"
+  },
+  {
+   "depends_on": "eval:doc.operation_type=='Export'",
+   "fieldname": "section_break_xml_template",
+   "fieldtype": "Section Break",
+   "label": "XML Template Configuration"
+  },
+  {
+   "depends_on": "eval:doc.operation_type=='Export'",
+   "fieldname": "xml_template",
+   "fieldtype": "Code",
+   "label": "XML Template",
+   "options": "Jinja"
+  },
+  {
+   "depends_on": "eval:doc.operation_type=='Export'",
+   "description": "Optional JSON filters for export records. Example: {\"published\": 1} or [[\"status\", \"in\", [\"Published\", \"Active\"]]]",
+   "fieldname": "export_filters_json",
+   "fieldtype": "Code",
+   "label": "Export Filters (JSON)",
+   "options": "JSON"
   },
   {
    "depends_on": "eval:(doc.operation_type=='Import' && doc.source_type!='Manual Upload') || doc.source_type=='FTP'",
@@ -431,7 +466,7 @@
    "link_fieldname": "source_name"
   }
  ],
- "modified": "2026-06-03 11:14:55.523019",
+ "modified": "2026-07-08 21:35:19.856631",
  "modified_by": "Administrator",
  "module": "Openimmo Propms",
  "name": "Integration Source",

@@ -16,6 +16,8 @@ class IntegrationSource(Document):
         else:
             self._validate_source_config()
         self._validate_target_doctype()
+        if self.use_jinja_template and self.xml_template:
+            self._validate_jinja_template()
     
     def on_update(self):
         if self.enabled and self._has_scheduler_changed():
@@ -49,7 +51,7 @@ class IntegrationSource(Document):
         if self.source_type == "FTP" and self.ftp_transfer_enabled and not (self.ftp_host and self.ftp_username):
             frappe.throw(_("FTP Host and Username are required for FTP export delivery"))
 
-        if self._uses_delete_action():
+        if not getattr(self, "use_jinja_template", 0) and self._uses_delete_action():
             for xml_path in [
                 "verwaltung_techn.objektnr_intern",
                 "verwaltung_techn.objektnr_extern",
@@ -101,6 +103,11 @@ class IntegrationSource(Document):
         """Validate target doctype exists"""
         if self.target_doctype and not frappe.db.exists("DocType", self.target_doctype):
             frappe.throw(_("Target DocType {0} does not exist").format(self.target_doctype))
+
+    def _validate_jinja_template(self):
+        """Validate Jinja syntax on save (same pattern as Notification DocType)"""
+        from frappe.utils.jinja import validate_template
+        validate_template(self.xml_template)
     
     def _has_scheduler_changed(self):
         """Check if scheduler settings changed"""
