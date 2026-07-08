@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<openimmo>
+    <uebertragung art="ONLINE" umfang="" modus="" version="1.2.7" sendersoftware="OIGEN" senderversion="1.0" timestamp=""/>
+    <anbieter>
+        <anbieternr></anbieternr>
+        <firma></firma>
+        <immobilie>
+            <objektkategorie>
+                <nutzungsart WOHNEN="false" GEWERBE="false" ANLAGE="false" WAZ="false"/>
+                <vermarktungsart KAUF="false" MIETE_PACHT="false"/>
+                <objektart/>
+            </objektkategorie>
+            <geo>
+                <plz></plz>
+                <ort></ort>
+                <land iso_land="DEU"/>
+            </geo>
+            <verwaltung_techn>
+                <objektnr_intern></objektnr_intern>
+                <objektnr_extern></objektnr_extern>
+                <aktion aktionart=""/>
+                <openimmo_obid></openimmo_obid>
+                <stand_vom></stand_vom>
+            </verwaltung_techn>
+        </immobilie>
+    </anbieter>
+</openimmo>

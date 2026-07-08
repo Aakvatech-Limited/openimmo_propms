@@ -8,6 +8,71 @@ frappe.ui.form.on("Integration Source", {
 		toggle_credential_fields(frm);
 		update_ftp_intro(frm);
 
+		// Load Default Template button
+		if (frm.doc.use_jinja_template && frm.doc.operation_type === "Export") {
+			frm.add_custom_button(__("Load Default Template"), () => {
+				const templates = [
+					"Immowelt Expose (Single)",
+					"Immowelt Batch (Multiple)",
+					"OpenImmo 1.2.7 (Full)",
+				];
+				const d = new frappe.ui.Dialog({
+					title: __("Select Default Template"),
+					fields: [
+						{
+							fieldname: "template",
+							fieldtype: "Select",
+							label: __("Template"),
+							options: templates,
+							reqd: 1,
+						},
+					],
+					primary_action_label: __("Load"),
+					primary_action({ template }) {
+						d.hide();
+						frappe.call({
+							method: "openimmo_propms.api.export.get_default_template",
+							args: { template_name: template },
+							freeze: true,
+							freeze_message: __("Loading template..."),
+							callback: (r) => {
+								if (r.message) {
+									frm.set_value("xml_template", r.message);
+									frappe.show_alert({
+										message: __("Default template loaded: {0}", [template]),
+										indicator: "green",
+									});
+								}
+							},
+						});
+					},
+				});
+				d.show();
+			}, __("Tools"));
+		}
+
+		// Preview Jinja XML button (same pattern as Notification/Auto Repeat preview)
+		if (frm.doc.use_jinja_template && frm.doc.xml_template && frm.doc.operation_type === "Export") {
+			frm.add_custom_button(__("Preview XML"), () => {
+				frappe.call({
+					method: "openimmo_propms.api.export.preview_jinja_xml",
+					args: { source_name: frm.doc.name },
+					freeze: true,
+					freeze_message: __("Rendering Jinja template..."),
+					callback: (r) => {
+						if (r.message) {
+							frappe.msgprint({
+								title: __("Preview XML"),
+								indicator: "green",
+								message: `<pre style="max-height:500px;overflow:auto;font-size:12px;">${frappe.utils.escape_html(r.message)}</pre>`,
+								wide: true,
+							});
+						}
+					},
+				});
+			}, __("Tools"));
+		}
+
 		if (frm.doc.source_type === "FTP") {
 			// 1. Connection Test Button
 			frm.add_custom_button(__("FTP Test Connection"), () => {
