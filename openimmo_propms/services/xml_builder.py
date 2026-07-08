@@ -8,28 +8,41 @@ import re
 def ensure_xml_path(parent, path):
     """
     Create nested XML nodes for a dotted path and return the last node.
-    Supports attributes via @ notation.
-    Example path: 'geo.land@iso_land'
+    Supports attributes via @ notation and numeric array indices (e.g. 'bewertung.feld.0.name').
     """
     current = parent
     parts = path.split(".")
     
-    for i, part in enumerate(parts):
-        # Check if this part has an attribute
+    i = 0
+    while i < len(parts):
+        part = parts[i]
         attr_name = None
         if "@" in part:
             part, attr_name = part.split("@")
         
-        # Find or create child
-        child = current.find(part)
-        if child is None:
-            child = etree.SubElement(current, part)
-        
-        current = child
-        
-        # If there's an attribute but more parts follow, it's a structural error in path
-        # but we handle it by just continuing. Usually @ is at the very end.
-        if attr_name and i == len(parts) - 1:
+        # Check if the next part is a numeric index
+        index = None
+        if i + 1 < len(parts) and parts[i+1].isdigit():
+            index = int(parts[i+1])
+            
+        if index is not None:
+            # Find all children with the tag name
+            children = current.findall(part)
+            # Ensure we have enough children to satisfy the index
+            while len(children) <= index:
+                new_child = etree.SubElement(current, part)
+                children.append(new_child)
+            child = children[index]
+            current = child
+            i += 2  # Skip the index part
+        else:
+            child = current.find(part)
+            if child is None:
+                child = etree.SubElement(current, part)
+            current = child
+            i += 1
+            
+        if attr_name and i == len(parts):
             return current, attr_name
             
     return current, None
