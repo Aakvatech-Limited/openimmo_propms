@@ -17,7 +17,7 @@ OPENIMMO_JINJA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
                   {%- if source.regi_id %} regi_id="{{ source.regi_id }}"{% endif -%}/>
     <anbieter>
         <anbieternr>{{ source.anbieter_id }}</anbieternr>
-        <firma>{{ source.provider_name }}</firma>
+        <firma>{{ doc.company }}</firma>
         <openimmo_anid>{{ source.openimmo_anid }}</openimmo_anid>
 
         {# --- Setup Records List for both Single & Batch packaging --- #}
@@ -75,7 +75,8 @@ OPENIMMO_JINJA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
                     {%- if doc.custom_latitude or doc.custom_longitude -%}
                     <geokoordinaten breitengrad="{{ doc.custom_latitude }}" laengengrad="{{ doc.custom_longitude }}"/>
                     {%- endif -%}
-                    {%- if doc.custom_property_address %}<strasse>{{ doc.custom_property_address }}</strasse>{% endif -%}
+                    {%- if doc.custom_property_street %}<strasse>{{ doc.custom_property_street }}</strasse>{% endif -%}
+                    {%- if doc.custom_house_number %}<hausnummer>{{ doc.custom_house_number }}</hausnummer>{% endif -%}
                     <land iso_land="DEU"/>
                     {%- if doc.custom_district %}<regionaler_zusatz>{{ doc.custom_district }}</regionaler_zusatz>{% endif -%}
                     {%- if doc.custom_level_in_the_building is not none and doc.custom_level_in_the_building != "" -%}
@@ -113,7 +114,7 @@ OPENIMMO_JINJA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
                     {%- if doc.custom_commission_description %}<courtage_hinweis>{{ doc.custom_commission_description }}</courtage_hinweis>{% endif -%}
                     <waehrung iso_waehrung="EUR"/>
                     {%- if doc.security_deposit is not none %}<kaution>{{ doc.security_deposit }}</kaution>{% endif -%}
-                    {%- if doc.security_deposit is not none %}<kaution_text>{{ doc.security_deposit }}</kaution_text>{% endif -%}
+                    {%- if doc.custom_deposit is not none %}<kaution_text>{{ doc.custom_deposit }}</kaution_text>{% endif -%}
 
                     {#- OPTIONAL EXTRA PRICE TAGS (Uncomment to use)
                     {%- if doc.custom_flat_rate_rent is not none %}<pauschalmiete>{{ doc.custom_flat_rate_rent }}</pauschalmiete>{% endif -%}
@@ -133,6 +134,7 @@ OPENIMMO_JINJA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
                     {%- if doc.master_bedroom is not none %}<anzahl_schlafzimmer>{{ doc.master_bedroom }}</anzahl_schlafzimmer>{% endif -%}
                     {%- if doc.custom_balcony is not none %}<anzahl_balkone>{{ doc.custom_balcony }}</anzahl_balkone>{% endif -%}
                     {%- if doc.bedroom is not none %}<anzahl_zimmer>{{ doc.bedroom }}</anzahl_zimmer>{% endif -%}
+                    {%- if doc.custom_garage_spaces is not none %}<anzahl_stellplaetze>{{ doc.custom_garage_spaces }}</anzahl_stellplaetze>{% endif -%}
                 </flaechen>
 
                 <ausstattung>
@@ -141,21 +143,30 @@ OPENIMMO_JINJA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
                                  ZENTRAL="{{ 'true' if doc.custom_type_of_heating == 'Sammelheizung' else 'false' }}"/>
                     {%- endif -%}
                     
-                    {%- if doc.custom_energy_carrier -%}
+                    {%- if doc.custom_energy_carrier or doc.custom_hot_water_preparation -%}
                     <befeuerung GAS="{{ 'true' if doc.custom_energy_carrier == 'Gas' else 'false' }}"
                                Solar="{{ 'true' if doc.custom_energy_carrier == 'Solar' else 'false' }}"
                                OEL="{{ 'true' if doc.custom_energy_carrier == 'Öl' else 'false' }}"
                                ELEKTRO="{{ 'true' if doc.custom_energy_carrier == 'Strom' else 'false' }}"
                                KOHLE="{{ 'true' if doc.custom_energy_carrier == 'Kohle' else 'false' }}"
-                               FERN="{{ 'true' if doc.custom_energy_carrier == 'Fernwärme' else 'false' }}"/>
+                               FERN="{{ 'true' if doc.custom_energy_carrier == 'Fernwärme' else 'false' }}"
+                               WASSER-ELEKTRO="{{ 'true' if doc.custom_hot_water_preparation in ['E-Boiler', 'Elektrodurchlauferhitzer'] else 'false' }}"/>
                     {%- endif -%}
 
                     {%- if doc.custom_elevator is not none -%}
-                    <fahrstuhl>{{ 'true' if doc.custom_elevator in [True, 'true', 1, '1'] else 'false' }}</fahrstuhl>
+                    <fahrstuhl PERSONEN="{{ 'true' if doc.custom_elevator in [True, 'true', 1, '1'] else 'false' }}"/>
                     {%- endif -%}
                     
                     {%- if doc.custom_garage_spaces is not none -%}
                     <stellplatzart GARAGE="{{ 'true' if doc.custom_garage_spaces else 'false' }}"/>
+                    {%- endif -%}
+
+                    {%- if doc.custom_quality_category -%}
+                    <ausstatt_kategorie>{{ doc.custom_quality_category }}</ausstatt_kategorie>
+                    {%- endif -%}
+
+                    {%- if doc.custom_internet_type -%}
+                    <breitband_zugang art="{{ doc.custom_internet_type }}" speed="1000"/>
                     {%- endif -%}
 
                     {%- if doc.facing -%}
@@ -256,6 +267,12 @@ OPENIMMO_JINJA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
                     {%- if doc.custom_location_short -%}
                     <dreizeiler>{{ doc.custom_location_short }}</dreizeiler>
                     {%- endif -%}
+                    {%- if doc.custom_location -%}
+                    <lage>{{ doc.custom_location }}</lage>
+                    {%- endif -%}
+                    {%- if doc.custom_equipment -%}
+                    <ausstatt_beschr>{{ doc.custom_equipment }}</ausstatt_beschr>
+                    {%- endif -%}
                     {%- if doc.custom_marketing_description -%}
                     <objektbeschreibung>{{ doc.custom_marketing_description }}</objektbeschreibung>
                     {%- endif -%}
@@ -304,7 +321,7 @@ OPENIMMO_JINJA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
 
                 <verwaltung_objekt>
                     {%- if doc.custom_marketing_status -%}
-                    <reserviert>{{ doc.custom_marketing_status }}</reserviert>
+                    <reserviert>{{ 'true' if doc.custom_marketing_status == 'RESERVIERT' else 'false' }}</reserviert>
                     {%- endif -%}
                     {%- if doc.status -%}
                     <vermietet>{{ 'true' if doc.status == 'Rented' else 'false' }}</vermietet>
@@ -334,4 +351,4 @@ OPENIMMO_JINJA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
         {%- endfor -%}
     </anbieter>
 </openimmo>
-"""
+```
