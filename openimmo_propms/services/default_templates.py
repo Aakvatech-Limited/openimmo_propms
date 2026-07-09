@@ -115,14 +115,14 @@ OPENIMMO_JINJA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
                     {%- if doc.security_deposit is not none %}<kaution>{{ doc.security_deposit }}</kaution>{% endif -%}
                     {%- if doc.security_deposit is not none %}<kaution_text>{{ doc.security_deposit }}</kaution_text>{% endif -%}
 
-                    <!-- OPTIONAL EXTRA PRICE TAGS (Uncomment to use)
+                    {#- OPTIONAL EXTRA PRICE TAGS (Uncomment to use)
                     {%- if doc.custom_flat_rate_rent is not none %}<pauschalmiete>{{ doc.custom_flat_rate_rent }}</pauschalmiete>{% endif -%}
                     {%- if doc.custom_net_operating_costs is not none %}<betriebskostennetto>{{ doc.custom_net_operating_costs }}</betriebskostennetto>{% endif -%}
                     {%- if doc.custom_gross_rent is not none %}<gesamtmietebrutto>{{ doc.custom_gross_rent }}</gesamtmietebrutto>{% endif -%}
                     {%- if doc.custom_development_costs is not none %}<erschliessungskosten>{{ doc.custom_development_costs }}</erschliessungskosten>{% endif -%}
                     {%- if doc.custom_carport_rent is not none %}<stp_carport stellplatzmiete="{{ doc.custom_carport_rent }}"/></preise>{% endif -%}
                     {%- if doc.custom_parking_rent is not none %}<stp_freiplatz stellplatzmiete="{{ doc.custom_parking_rent }}"/></preise>{% endif -%}
-                    -->
+                    -#}
                 </preise>
 
                 <flaechen>
@@ -173,7 +173,7 @@ OPENIMMO_JINJA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
                     <moebliert moeb="{{ 'VOLL' if doc.furnished in [True, 'true', 1, '1'] else 'NICHT_MOEBLIERT' }}"/>
                     {%- endif -%}
 
-                    <!-- OPTIONAL EXTRA FITTING TAGS (Uncomment to use)
+                    {#- OPTIONAL EXTRA FITTING TAGS (Uncomment to use)
                     <boden FLIESEN="{{ 'true' if doc.custom_tiles else 'false' }}" TEPPICH="{{ 'true' if doc.custom_carpet else 'false' }}" PARKETT="{{ 'true' if doc.custom_parquet else 'false' }}"/>
                     <bad DUSCHE="{{ 'true' if doc.custom_shower else 'false' }}" WANNE="{{ 'true' if doc.custom_tub else 'false' }}" FENSTER="{{ 'true' if doc.custom_window else 'false' }}"/>
                     <kueche EBK="{{ 'true' if doc.custom_fitted_kitchen else 'false' }}" OFFEN="{{ 'true' if doc.custom_open_kitchen else 'false' }}"/>
@@ -184,11 +184,11 @@ OPENIMMO_JINJA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
                     <wintergarten>{{ 'true' if doc.custom_conservatory else 'false' }}</wintergarten>
                     <rollstuhlgerecht>{{ 'true' if doc.custom_wheelchair_accessible else 'false' }}</rollstuhlgerecht>
                     <barrierefrei>{{ 'true' if doc.custom_barrier_free else 'false' }}</barrierefrei>
-                    {%- if doc.custom_has_cellar %}<unterkellert keller="{{ doc.custom_has_cellar }}"/><% endif -%}
+                    {%- if doc.custom_has_cellar %}<unterkellert keller="{{ doc.custom_has_cellar }}" />{% endif -%}
                     <abstellraum>{{ 'true' if doc.custom_utility_room else 'false' }}</abstellraum>
                     <gaestewc>{{ 'true' if doc.custom_guest_toilet else 'false' }}</gaestewc>
                     <seniorengerecht>{{ 'true' if doc.custom_senior_friendly else 'false' }}</seniorengerecht>
-                    -->
+                    -#}
                 </ausstattung>
 
                 <zustand_angaben>
@@ -207,11 +207,11 @@ OPENIMMO_JINJA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
                     </energiepass>
                     {%- endif -%}
 
-                    <!-- OPTIONAL EXTRA CONDITION TAGS (Uncomment to use)
-                    {%- if doc.custom_building_age_category %}<alter alter_attr="{{ doc.custom_building_age_category }}"/><% endif -%}
-                    {%- if doc.custom_infrastructure_status %}<erschliessung erschl_attr="{{ doc.custom_infrastructure_status }}"/><% endif -%}
-                    {%- if doc.custom_building_regulations %}<bebaubar_nach bebaubar_attr="{{ doc.custom_building_regulations }}"/><% endif -%}
-                    -->
+                    {#- OPTIONAL EXTRA CONDITION TAGS (Uncomment to use)
+                    {%- if doc.custom_building_age_category %}<alter alter_attr="{{ doc.custom_building_age_category }}" />{% endif -%}
+                    {%- if doc.custom_infrastructure_status %}<erschliessung erschl_attr="{{ doc.custom_infrastructure_status }}" />{% endif -%}
+                    {%- if doc.custom_building_regulations %}<bebaubar_nach bebaubar_attr="{{ doc.custom_building_regulations }}" />{% endif -%}
+                    -#}
 
                     {# --- Energy Certificate: pulls values dynamically from linked DocType and applies formatting --- #}
                     {%- if doc.custom_energy_certificate -%}
@@ -240,14 +240,14 @@ OPENIMMO_JINJA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
                     </feld>
                 </bewertung>
 
-                <!-- OPTIONAL INFRASTRUCTURE TAGS (Uncomment to use)
+                {#- OPTIONAL INFRASTRUCTURE TAGS (Uncomment to use)
                 <infrastruktur>
                     <zulieferung>{{ 'true' if doc.custom_delivery_possible else 'false' }}</zulieferung>
-                    {%- if doc.custom_view_type %}<ausblick blick="{{ doc.custom_view_type }}"/><% endif -%}
+                    {%- if doc.custom_view_type %}<ausblick blick="{{ doc.custom_view_type }}" />{% endif -%}
                     {%- if doc.custom_distance_to_school %}<distanzen distanz_zu="HAUPTSCHULE">{{ doc.custom_distance_to_school }}</distanzen>{% endif -%}
                     {%- if doc.custom_distance_to_lake %}<distanzen_sport distanz_zu_sport="SEE">{{ doc.custom_distance_to_lake }}</distanzen_sport>{% endif -%}
                 </infrastruktur>
-                -->
+                -#}
 
                 <freitexte>
                     {%- if doc.custom_marketing_title -%}
