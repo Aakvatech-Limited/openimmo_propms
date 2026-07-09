@@ -11,43 +11,21 @@ frappe.ui.form.on("Integration Source", {
 		// Load Default Template button
 		if (frm.doc.use_jinja_template && frm.doc.operation_type === "Export") {
 			frm.add_custom_button(__("Load Default Template"), () => {
-				const templates = [
-					"Immowelt Expose (Single)",
-					"Immowelt Batch (Multiple)",
-					"OpenImmo 1.2.7 (Full)",
-				];
-				const d = new frappe.ui.Dialog({
-					title: __("Select Default Template"),
-					fields: [
-						{
-							fieldname: "template",
-							fieldtype: "Select",
-							label: __("Template"),
-							options: templates,
-							reqd: 1,
-						},
-					],
-					primary_action_label: __("Load"),
-					primary_action({ template }) {
-						d.hide();
-						frappe.call({
-							method: "openimmo_propms.api.export.get_default_template",
-							args: { template_name: template },
-							freeze: true,
-							freeze_message: __("Loading template..."),
-							callback: (r) => {
-								if (r.message) {
-									frm.set_value("xml_template", r.message);
-									frappe.show_alert({
-										message: __("Default template loaded: {0}", [template]),
-										indicator: "green",
-									});
-								}
-							},
-						});
+				frappe.call({
+					method: "openimmo_propms.api.export.get_default_template",
+					args: { template_name: "OpenImmo 1.2.7" },
+					freeze: true,
+					freeze_message: __("Loading template..."),
+					callback: (r) => {
+						if (r.message) {
+							frm.set_value("xml_template", r.message);
+							frappe.show_alert({
+								message: __("Default template loaded: OpenImmo 1.2.7"),
+								indicator: "green",
+							});
+						}
 					},
 				});
-				d.show();
 			}, __("Tools"));
 		}
 
