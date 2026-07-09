@@ -1,11 +1,7 @@
 """Default Jinja XML templates for OpenImmo export."""
 
 OPENIMMO_JINJA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
-<!--    
-	OpenImmo $VERSION: 1.2.7
-	Direct Jinja template mapping all Property fields directly (no fallback values).
-	Resolves Property Type and Nutzungsart from linked DocType dynamically.
--->
+<!-- OpenImmo $VERSION: 1.2.7 -->
 <openimmo>
     <uebertragung art="ONLINE" 
                   umfang="{{ source.transfer_scope }}" 
