@@ -27,17 +27,13 @@ def run_openimmo_export(
 
 @frappe.whitelist()
 def get_default_template(template_name):
-    """Return the content of a default Jinja XML template."""
+    """Return the content of the default Jinja XML template."""
     from openimmo_propms.services.default_templates import (
-        IMMOWELT_EXPOSE_TEMPLATE,
-        IMMOWELT_BATCH_TEMPLATE,
         OPENIMMO_JINJA_TEMPLATE,
     )
 
     templates = {
-        "Immowelt Expose (Single)": IMMOWELT_EXPOSE_TEMPLATE,
-        "Immowelt Batch (Multiple)": IMMOWELT_BATCH_TEMPLATE,
-        "OpenImmo 1.2.7 (Full)": OPENIMMO_JINJA_TEMPLATE,
+        "OpenImmo 1.2.7": OPENIMMO_JINJA_TEMPLATE,
     }
 
     if template_name not in templates:

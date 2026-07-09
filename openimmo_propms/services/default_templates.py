@@ -1,504 +1,300 @@
-"""Default Jinja XML templates for Immowelt/OpenImmo export.
-
-Copy-paste these into the Integration Source xml_template field after
-enabling 'Use Jinja Template'.
-
-Available context variables in templates:
-    doc         - The Property document (full Frappe document)
-    mapped      - Flat XML-path-to-value dict from export_mapper
-    source      - Integration Source document
-    frappe      - Full frappe object (for frappe.get_doc, frappe.db, etc.)
-
-Available custom methods (registered via hooks.py):
-    get_document(doctype, name)     - Fetch a linked document
-    get_value(doctype, name, field) - Fetch a single field value
-    format_immowelt_date(value)     - Convert YYYY-MM-DD to MM-YYYY
-    format_decimal(value)           - Convert 189,0 to 189.0
-
-Built-in Frappe Jinja globals:
-    frappe.utils.nowdate, frappe.utils.now_datetime, frappe.utils.cint,
-    frappe.utils.flt, frappe.utils.cstr, etc.
-"""
-
-# ---------------------------------------------------------------------------
-# IMMOWELT EXPOSE TEMPLATE (OpenImmo XML 1.2.7 compliant)
-# ---------------------------------------------------------------------------
-# Usage: Set record_packaging = "Separate XML per Record"
-#        Loop through all_records in batch mode or use doc in single mode.
-# ---------------------------------------------------------------------------
-
-IMMOWELT_EXPOSE_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
-<expose>
-    <address>
-        <company>{{ source.provider_name or "" }}</company>
-    </address>
-
-    <estate
-        id="{{ doc.name }}"
-        guid="{{ doc.name }}"
-        onlineid="{{ doc.custom_unit_id or doc.name }}"
-        type-id="{{ mapped.get('estate.type_id') or '' }}"
-        type-description="{{ mapped.get('estate.type_description') or '' }}"
-        salestype="{{ mapped.get('estate.salestype') or '' }}"
-        category-id="{{ mapped.get('estate.category_id', '') }}"
-        category-description="{{ mapped.get('estate.category_description', '') }}">
-
-        {# --- Basic Info Items --- #}
-        {% for item_id, xml_path in [
-            ("ReferenceNumber", "verwaltung_techn.objektnr_intern"),
-            ("OnlineID", "verwaltung_techn.objektnr_extern"),
-            ("Description", "freitexte.objekttitel"),
-            ("LocationStreet", "geo.strasse"),
-            ("LocationZip", "geo.plz"),
-            ("LocationCity", "geo.ort"),
-            ("LocationCountry", "geo.land"),
-            ("Price", "preise.kaltmiete"),
-            ("AdditionalCosts", "preise.nebenkosten"),
-            ("PriceWarmmiete", "preise.warmmiete"),
-            ("Baujahr", "zustand_angaben.baujahr"),
-            ("Bezugsfrei", "verwaltung_techn.verfuegbar_ab"),
-            ("AreaLiving", "flaechen.wohnflaeche"),
-            ("AreaLand", "flaechen.grundstuecksflaeche"),
-            ("Rooms", "flaechen.anzahl_zimmer"),
-            ("Info1", "freitexte.objektbeschreibung"),
-            ("Info2", "freitexte.lage"),
-            ("Info3", "freitexte.ausstatt_beschr"),
-        ] %}
-            {% set val = mapped.get(xml_path) %}
-            {% if val not in [none, ""] %}
-            <item id="{{ item_id }}">
-                <title>{{ item_id }}</title>
-                <description>{{ val }}</description>
-            </item>
-            {% endif %}
-        {% endfor %}
-
-        {# --- Energy Certificate (linked document) --- #}
-        {% if doc.custom_energy_certificate %}
-            {% set cert = frappe.get_doc("Energy Certificate Link", doc.custom_energy_certificate) %}
-            {% if cert %}
-            <energyperformance
-                visible="true"
-                EnergiePassArt="{{ cert.energiepass_art or '' }}"
-                EnergiePassWert="{{ cert.energiepass_kennwert | format_decimal if cert.energiepass_kennwert else '' }}"
-                EnergiePassWertKlasse="{{ cert.energieeffizienzklasse or '' }}"
-                EnergiePassInclWasser="{{ cert.mitwarmwasser or '' }}" />
-            {% endif %}
-        {% endif %}
-
-        {# --- Image Gallery with hero image logic --- #}
-        {% if doc.custom_image_gallery %}
-        <images>
-            {% for img in doc.custom_image_gallery %}
-                {% if loop.first %}
-            <thumbnail>{{ source.base_media_url or frappe.utils.get_url() }}/{{ img.picture }}</thumbnail>
-                {% endif %}
-            <image id="{{ loop.index0 }}">
-                <source>{{ source.base_media_url or frappe.utils.get_url() }}/{{ img.picture }}</source>
-                <description>Bild {{ loop.index }}</description>
-                <source_thumbnail>{{ source.base_media_url or frappe.utils.get_url() }}/{{ img.picture }}</source_thumbnail>
-                <source_XXL>{{ source.base_media_url or frappe.utils.get_url() }}/{{ img.picture }}</source_XXL>
-            </image>
-            {% endfor %}
-        </images>
-        {% endif %}
-
-        {# --- Attachments --- #}
-        {% if doc.custom_image_gallery %}
-        <attachments>
-            {% for img in doc.custom_image_gallery %}
-            <Document id="{{ loop.index0 }}">
-                <source>{{ source.base_media_url or frappe.utils.get_url() }}/{{ img.picture }}</source>
-                <description>Bild {{ loop.index }}</description>
-            </Document>
-            {% endfor %}
-        </attachments>
-        {% endif %}
-
-        {# --- Geo Data --- #}
-        {% if doc.custom_latitude or doc.custom_longitude %}
-        <GeoData>
-            {% if doc.custom_latitude %}<breitengrad>{{ doc.custom_latitude }}</breitengrad>{% endif %}
-            {% if doc.custom_longitude %}<laengengrad>{{ doc.custom_longitude }}</laengengrad>{% endif %}
-        </GeoData>
-        {% endif %}
-    </estate>
-</expose>"""
-
-
-# ---------------------------------------------------------------------------
-# BATCH MODE TEMPLATE (multiple properties in one XML)
-# ---------------------------------------------------------------------------
-# Usage: Set record_packaging = "Single XML for All Records"
-#        Template receives all_records = [{"doc": ..., "mapped": ...}, ...]
-# ---------------------------------------------------------------------------
-
-IMMOWELT_BATCH_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
-<exposes>
-{% for rec in all_records %}
-    {% set doc = rec.doc %}
-    {% set mapped = rec.mapped %}
-    <expose>
-        <address>
-            <company>{{ source.provider_name or "" }}</company>
-        </address>
-        <estate id="{{ doc.name }}" guid="{{ doc.name }}">
-            {% if doc.custom_energy_certificate %}
-                {% set cert = frappe.get_doc("Energy Certificate Link", doc.custom_energy_certificate) %}
-                {% if cert %}
-                <energyperformance visible="true"
-                    EnergiePassWert="{{ cert.energiepass_kennwert | format_decimal if cert.energiepass_kennwert else '' }}" />
-                {% endif %}
-            {% endif %}
-
-            {% if doc.custom_image_gallery %}
-            <images>
-                {% for img in doc.custom_image_gallery %}
-                <image id="{{ loop.index0 }}">
-                    <source>{{ source.base_media_url or frappe.utils.get_url() }}/{{ img.picture }}</source>
-                </image>
-                {% endfor %}
-            </images>
-            {% endif %}
-        </estate>
-    </expose>
-{% endfor %}
-</exposes>"""
-
-
-# ---------------------------------------------------------------------------
-# OPENIMMO JINJA TEMPLATE (OpenImmo XML 1.2.7 XSD compliant)
-# ---------------------------------------------------------------------------
-# Usage: Supports both "Separate XML per Record" and "Single XML for All Records".
-#        Paste this template into the xml_template field of Integration Source.
-# ---------------------------------------------------------------------------
+"""Default Jinja XML templates for OpenImmo export."""
 
 OPENIMMO_JINJA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
+<!--    
+	OpenImmo $VERSION: 1.2.7
+	Direct Jinja template mapping all Property fields directly (no fallback values).
+	Resolves Property Type and Nutzungsart from linked DocType dynamically.
+-->
 <openimmo>
-    <uebertragung art="ONLINE"
-                  umfang="{{ source.transfer_scope or '' }}"
-                  modus="{{ source.transfer_mode or '' }}"
-                  version="1.2.7"
-                  sendersoftware="OIGEN"
-                  senderversion="1.0"
-                  timestamp="{{ frappe.utils.now_datetime().strftime('%Y-%m-%dT%H:%M:%S') }}"/>
+    <uebertragung art="ONLINE" 
+                  umfang="{{ source.transfer_scope }}" 
+                  modus="{{ source.transfer_mode }}" 
+                  version="1.2.7" 
+                  sendersoftware="OIGEN" 
+                  senderversion="1.0" 
+                  timestamp="{{ frappe.utils.now_datetime().strftime('%Y-%m-%dT%H:%M:%S') }}"
+                  {%- if source.regi_id %} regi_id="{{ source.regi_id }}"{% endif -%}/>
     <anbieter>
-        <anbieternr>{{ source.anbieter_id or '' }}</anbieternr>
-        <firma>{{ source.provider_name or '' }}</firma>
-        <openimmo_anid>{{ source.openimmo_anid or '' }}</openimmo_anid>
+        <anbieternr>{{ source.anbieter_id }}</anbieternr>
+        <firma>{{ source.provider_name }}</firma>
+        <openimmo_anid>{{ source.openimmo_anid }}</openimmo_anid>
 
+        {# --- Setup Records List for both Single & Batch packaging --- #}
         {%- if all_records -%}
             {%- set records = all_records -%}
         {%- else -%}
-            {%- set records = [{'doc': doc, 'mapped': mapped}] -%}
+            {%- set records = [{'doc': doc}] -%}
         {%- endif -%}
 
         {%- for rec in records -%}
             {%- set doc = rec.doc -%}
-            {%- set mapped = rec.mapped -%}
             <immobilie>
                 <objektkategorie>
-                    <nutzungsart
-                        WOHNEN="{{ 'true' if mapped.get('objektkategorie.nutzungsart@WOHNEN') else 'false' }}"
-                        GEWERBE="{{ 'true' if mapped.get('objektkategorie.nutzungsart@GEWERBE') else 'false' }}"
-                        ANLAGE="{{ 'true' if mapped.get('objektkategorie.nutzungsart@ANLAGE') else 'false' }}"
-                        WAZ="{{ 'true' if mapped.get('objektkategorie.nutzungsart@WAZ') else 'false' }}" />
-                    <vermarktungsart
-                        KAUF="{{ 'true' if mapped.get('objektkategorie.vermarktungsart@KAUF') else 'false' }}"
-                        MIETE_PACHT="{{ 'true' if mapped.get('objektkategorie.vermarktungsart@MIETE_PACHT') else 'false' }}"
-                        {%- if mapped.get('objektkategorie.vermarktungsart@ERBPACHT') is not none %} ERBPACHT="{{ 'true' if mapped.get('objektkategorie.vermarktungsart@ERBPACHT') else 'false' }}"{% endif -%}
-                        {%- if mapped.get('objektkategorie.vermarktungsart@LEASING') is not none %} LEASING="{{ 'true' if mapped.get('objektkategorie.vermarktungsart@LEASING') else 'false' }}"{% endif -%} />
+                    {# --- Setup namespace to fetch usage attributes dynamically --- #}
+                    {%- set ns_na = namespace(wohnen="false", gewerbe="false", anlage="false", waz="false") -%}
+                    {%- if doc.custom_property_type -%}
+                        {%- set prop_type = frappe.get_doc("Property Type", doc.custom_property_type) -%}
+                        {%- if prop_type -%}
+                            {%- set ns_na.wohnen = "true" if prop_type.use_residential else "false" -%}
+                            {%- set ns_na.gewerbe = "true" if prop_type.use_commercial else "false" -%}
+                            {%- set ns_na.anlage = "true" if prop_type.use_investment else "false" -%}
+                            {%- set ns_na.waz = "true" if prop_type.use_mixed else "false" -%}
+                        {%- endif -%}
+                    {%- endif -%}
+                    <nutzungsart WOHNEN="{{ ns_na.wohnen }}" GEWERBE="{{ ns_na.gewerbe }}" ANLAGE="{{ ns_na.anlage }}" WAZ="{{ ns_na.waz }}"/>
+                    <vermarktungsart KAUF="false" MIETE_PACHT="true" ERBPACHT="false" LEASING="false"/>
+                    
                     <objektart>
-                        {%- set ns = namespace(tag="", attrs="") -%}
-                        {%- for key, val in mapped.items() if key.startswith("objektkategorie.objektart.") -%}
-                            {%- if "@" in key -%}
-                                {%- set tag_and_attr = key.replace("objektkategorie.objektart.", "") -%}
-                                {%- set tag = tag_and_attr.split("@")[0] -%}
-                                {%- set attr_name = tag_and_attr.split("@")[1] -%}
-                                {%- set ns.tag = tag -%}
-                                {%- set ns.attrs = ns.attrs ~ ' ' ~ attr_name ~ '="' ~ val ~ '"' -%}
+                        {%- if doc.custom_property_type -%}
+                            {%- set prop_type = frappe.get_doc("Property Type", doc.custom_property_type) -%}
+                            {%- if prop_type -%}
+                                {%- set objektart = prop_type.openimmo_objektart -%}
+                                {%- set attribute = prop_type.openimmo_attribute -%}
+                                {%- set value = prop_type.openimmo_value -%}
+                                {%- if objektart -%}
+                                    <{{ objektart }}{% if attribute and value %} {{ attribute }}="{{ value | upper }}"{% endif %}/>
+                                {%- else -%}
+                                    <sonstige/>
+                                {%- endif -%}
                             {%- else -%}
-                                {%- set ns.tag = key.replace("objektkategorie.objektart.", "") -%}
+                                <sonstige/>
                             {%- endif -%}
-                        {%- endfor -%}
-                        {%- if ns.tag -%}
-                            <{{ ns.tag }}{{ ns.attrs }}/>
                         {%- else -%}
-                            <sonstige />
+                            <sonstige/>
+                        {%- endif -%}
+                        {%- if doc.custom_type_of_property -%}
+                        <objektart_zusatz>{{ doc.custom_type_of_property }}</objektart_zusatz>
                         {%- endif -%}
                     </objektart>
-                    {%- for key, val in mapped.items() if key.startswith("objektkategorie.user_defined_simplefield") and "@feldname" in key -%}
-                    <user_defined_simplefield feldname="{{ val }}"/>
-                    {%- endfor -%}
                 </objektkategorie>
 
                 <geo>
-                    {%- if mapped.get('geo.plz') %}<plz>{{ mapped.get('geo.plz') }}</plz>{% endif -%}
-                    {%- if mapped.get('geo.ort') %}<ort>{{ mapped.get('geo.ort') }}</ort>{% endif -%}
-                    {%- if mapped.get('geo.geokoordinaten@breitengrad') or mapped.get('geo.geokoordinaten@laengengrad') -%}
-                    <geokoordinaten breitengrad="{{ mapped.get('geo.geokoordinaten@breitengrad') }}" laengengrad="{{ mapped.get('geo.geokoordinaten@laengengrad') }}"/>
+                    {%- if doc.custom_pincode %}<plz>{{ doc.custom_pincode }}</plz>{% endif -%}
+                    {%- if doc.custom_property_city %}<ort>{{ doc.custom_property_city }}</ort>{% endif -%}
+                    {%- if doc.custom_latitude or doc.custom_longitude -%}
+                    <geokoordinaten breitengrad="{{ doc.custom_latitude }}" laengengrad="{{ doc.custom_longitude }}"/>
                     {%- endif -%}
-                    {%- if mapped.get('geo.strasse') %}<strasse>{{ mapped.get('geo.strasse') }}</strasse>{% endif -%}
-                    {%- if mapped.get('geo.hausnummer') %}<hausnummer>{{ mapped.get('geo.hausnummer') }}</hausnummer>{% endif -%}
-                    {%- if mapped.get('geo.bundesland') %}<bundesland>{{ mapped.get('geo.bundesland') }}</bundesland>{% endif -%}
-                    <land iso_land="{{ mapped.get('geo.land@iso_land') or '' }}"/>
-                    {%- if mapped.get('geo.gemeindecode') %}<gemeindecode>{{ mapped.get('geo.gemeindecode') }}</gemeindecode>{% endif -%}
-                    {%- if mapped.get('geo.flur') %}<flur>{{ mapped.get('geo.flur') }}</flur>{% endif -%}
-                    {%- if mapped.get('geo.flurstueck') %}<flurstueck>{{ mapped.get('geo.flurstueck') }}</flurstueck>{% endif -%}
-                    {%- if mapped.get('geo.gemarkung') %}<gemarkung>{{ mapped.get('geo.gemarkung') }}</gemarkung>{% endif -%}
-                    {%- if mapped.get('geo.etage') is not none and mapped.get('geo.etage') != "" %}<etage>{{ mapped.get('geo.etage') }}</etage>{% endif -%}
-                    {%- if mapped.get('geo.anzahl_etagen') is not none and mapped.get('geo.anzahl_etagen') != "" %}<anzahl_etagen>{{ mapped.get('geo.anzahl_etagen') }}</anzahl_etagen>{% endif -%}
-                    {%- if mapped.get('geo.lage_im_bau') %}<lage_im_bau>{{ mapped.get('geo.lage_im_bau') }}</lage_im_bau>{% endif -%}
-                    {%- if mapped.get('geo.wohnungsnr') %}<wohnungsnr>{{ mapped.get('geo.wohnungsnr') }}</wohnungsnr>{% endif -%}
-                    {%- if mapped.get('geo.lage_gebiet') %}<lage_gebiet>{{ mapped.get('geo.lage_gebiet') }}</lage_gebiet>{% endif -%}
-                    {%- if mapped.get('geo.regionaler_zusatz') %}<regionaler_zusatz>{{ mapped.get('geo.regionaler_zusatz') }}</regionaler_zusatz>{% endif -%}
-                    {%- if mapped.get('geo.karten_makro') %}<karten_makro>{{ mapped.get('geo.karten_makro') }}</karten_makro>{% endif -%}
-                    {%- if mapped.get('geo.karten_mikro') %}<karten_mikro>{{ mapped.get('geo.karten_mikro') }}</karten_mikro>{% endif -%}
+                    {%- if doc.custom_property_address %}<strasse>{{ doc.custom_property_address }}</strasse>{% endif -%}
+                    <land iso_land="DEU"/>
+                    {%- if doc.custom_district %}<regionaler_zusatz>{{ doc.custom_district }}</regionaler_zusatz>{% endif -%}
+                    {%- if doc.custom_level_in_the_building is not none and doc.custom_level_in_the_building != "" -%}
+                    <etage>{{ doc.custom_level_in_the_building }}</etage>
+                    {%- endif -%}
+                    <karten_makro>true</karten_makro>
+                    {%- if doc.custom_flurstück %}<flurstueck>{{ doc.custom_flurstück }}</flurstueck>{% endif -%}
                 </geo>
 
-                {%- set has_kontakt = mapped.get('kontaktperson.email_zentrale') or mapped.get('kontaktperson.email_direkt') or mapped.get('kontaktperson.tel_zentrale') or mapped.get('kontaktperson.tel_handy') or mapped.get('kontaktperson.name') -%}
-                {%- if has_kontakt -%}
                 <kontaktperson>
-                    {%- if mapped.get('kontaktperson.email_zentrale') %}<email_zentrale>{{ mapped.get('kontaktperson.email_zentrale') }}</email_zentrale>{% endif -%}
-                    {%- if mapped.get('kontaktperson.email_direkt') %}<email_direkt>{{ mapped.get('kontaktperson.email_direkt') }}</email_direkt>{% endif -%}
-                    {%- if mapped.get('kontaktperson.tel_zentrale') %}<tel_zentrale>{{ mapped.get('kontaktperson.tel_zentrale') }}</tel_zentrale>{% endif -%}
-                    {%- if mapped.get('kontaktperson.tel_durchw') %}<tel_durchw>{{ mapped.get('kontaktperson.tel_durchw') }}</tel_durchw>{% endif -%}
-                    {%- if mapped.get('kontaktperson.tel_fax') %}<tel_fax>{{ mapped.get('kontaktperson.tel_fax') }}</tel_fax>{% endif -%}
-                    {%- if mapped.get('kontaktperson.tel_handy') %}<tel_handy>{{ mapped.get('kontaktperson.tel_handy') }}</tel_handy>{% endif -%}
-                    <name>{{ mapped.get('kontaktperson.name') or '' }}</name>
-                    {%- if mapped.get('kontaktperson.vorname') %}<vorname>{{ mapped.get('kontaktperson.vorname') }}</vorname>{% endif -%}
-                    {%- if mapped.get('kontaktperson.titel') %}<titel>{{ mapped.get('kontaktperson.titel') }}</titel>{% endif -%}
-                    {%- if mapped.get('kontaktperson.anrede') %}<anrede>{{ mapped.get('kontaktperson.anrede') }}</anrede>{% endif -%}
+                    <email_zentrale>vermietung@axessio.de</email_zentrale>
+                    {%- if doc.custom_contact_email %}<email_direkt>{{ doc.custom_contact_email }}</email_direkt>{% endif -%}
+                    <tel_zentrale>0000000000</tel_zentrale>
+                    <tel_handy>0000000000</tel_handy>
+                    {%- if doc.custom_contact_phone %}<tel_direkt>{{ doc.custom_contact_phone }}</tel_direkt>{% endif -%}
+                    {%- if doc.custom_property_manager %}<name>{{ doc.custom_property_manager }}</name>{% endif -%}
                 </kontaktperson>
-                {%- endif -%}
 
-                {%- if mapped.get('weitere_adresse.name') or doc.get('custom_weitere_adresse_name') -%}
-                <weitere_adresse adressart="{{ mapped.get('weitere_adresse@adressart') or '' }}">
-                    <name>{{ mapped.get('weitere_adresse.name') or doc.get('custom_weitere_adresse_name') }}</name>
+                {%- if doc.custom_building_superintendent -%}
+                <weitere_adresse adressart="Hausmeister">
+                    <name>{{ doc.custom_building_superintendent }}</name>
                 </weitere_adresse>
                 {%- endif -%}
 
-                {%- set has_preise = mapped.get('preise.kaltmiete') is not none or mapped.get('preise.kaufpreis') is not none or mapped.get('preise.warmmiete') is not none -%}
-                {%- if has_preise -%}
                 <preise>
-                    {%- if mapped.get('preise.kaufpreis') is not none %}<kaufpreis>{{ mapped.get('preise.kaufpreis') }}</kaufpreis>{% endif -%}
-                    {%- if mapped.get('preise.kaltmiete') is not none %}<kaltmiete>{{ mapped.get('preise.kaltmiete') }}</kaltmiete>{% endif -%}
-                    {%- if mapped.get('preise.warmmiete') is not none %}<warmmiete>{{ mapped.get('preise.warmmiete') }}</warmmiete>{% endif -%}
-                    {%- if mapped.get('preise.nebenkosten') is not none %}<nebenkosten>{{ mapped.get('preise.nebenkosten') }}</nebenkosten>{% endif -%}
-                    {%- if mapped.get('preise.heizkosten') is not none %}<heizkosten>{{ mapped.get('preise.heizkosten') }}</heizkosten>{% endif -%}
-                    {%- if mapped.get('preise.zzg_mehrwertsteuer') is not none -%}
-                    <zzg_mehrwertsteuer>{{ 'true' if mapped.get('preise.zzg_mehrwertsteuer') in [true, 'true', 1, '1'] else 'false' }}</zzg_mehrwertsteuer>
+                    {%- if doc.custom_new_rent is not none %}<kaltmiete>{{ doc.custom_new_rent }}</kaltmiete>{% endif -%}
+                    {%- if doc.custom_new_operating_costs is not none %}<nebenkosten>{{ doc.custom_new_operating_costs }}</nebenkosten>{% endif -%}
+                    {%- if doc.custom_additional_costs is not none %}<heizkosten>{{ doc.custom_additional_costs }}</heizkosten>{% endif -%}
+                    {%- if doc.custom_plus_19_vat is not none -%}
+                    <zzg_mehrwertsteuer>{{ 'true' if doc.custom_plus_19_vat in [True, 'true', 1, '1'] else 'false' }}</zzg_mehrwertsteuer>
                     {%- endif -%}
-                    {%- if mapped.get('preise.provisionspflichtig') is not none -%}
-                    <provisionspflichtig>{{ 'true' if mapped.get('preise.provisionspflichtig') in [true, 'true', 1, '1'] else 'false' }}</provisionspflichtig>
+                    {%- if doc.custom_commissionfree is not none -%}
+                    <provisionspflichtig>{{ 'false' if doc.custom_commissionfree in [True, 'true', 1, '1'] else 'true' }}</provisionspflichtig>
                     {%- endif -%}
-                    <waehrung iso_waehrung="{{ mapped.get('preise.waehrung@iso_waehrung') or '' }}"/>
-                    {%- if mapped.get('preise.kaution') is not none %}<kaution>{{ mapped.get('preise.kaution') }}</kaution>{% endif -%}
-                    {%- if mapped.get('preise.kaution_text') %}<kaution_text>{{ mapped.get('preise.kaution_text') }}</kaution_text>{% endif -%}
+                    {%- if doc.custom_commission_description %}<courtage_hinweis>{{ doc.custom_commission_description }}</courtage_hinweis>{% endif -%}
+                    <waehrung iso_waehrung="EUR"/>
+                    {%- if doc.security_deposit is not none %}<kaution>{{ doc.security_deposit }}</kaution>{% endif -%}
+                    {%- if doc.security_deposit is not none %}<kaution_text>{{ doc.security_deposit }}</kaution_text>{% endif -%}
+
+                    <!-- OPTIONAL EXTRA PRICE TAGS (Uncomment to use)
+                    {%- if doc.custom_flat_rate_rent is not none %}<pauschalmiete>{{ doc.custom_flat_rate_rent }}</pauschalmiete>{% endif -%}
+                    {%- if doc.custom_net_operating_costs is not none %}<betriebskostennetto>{{ doc.custom_net_operating_costs }}</betriebskostennetto>{% endif -%}
+                    {%- if doc.custom_gross_rent is not none %}<gesamtmietebrutto>{{ doc.custom_gross_rent }}</gesamtmietebrutto>{% endif -%}
+                    {%- if doc.custom_development_costs is not none %}<erschliessungskosten>{{ doc.custom_development_costs }}</erschliessungskosten>{% endif -%}
+                    {%- if doc.custom_carport_rent is not none %}<stp_carport stellplatzmiete="{{ doc.custom_carport_rent }}"/></preise>{% endif -%}
+                    {%- if doc.custom_parking_rent is not none %}<stp_freiplatz stellplatzmiete="{{ doc.custom_parking_rent }}"/></preise>{% endif -%}
+                    -->
                 </preise>
-                {%- endif -%}
 
-                {%- set has_flaechen = mapped.get('flaechen.wohnflaeche') is not none or mapped.get('flaechen.nutzflaeche') is not none or mapped.get('flaechen.gesamtflaeche') is not none or mapped.get('flaechen.anzahl_zimmer') is not none -%}
-                {%- if has_flaechen -%}
                 <flaechen>
-                    {%- if mapped.get('flaechen.wohnflaeche') is not none %}<wohnflaeche>{{ mapped.get('flaechen.wohnflaeche') }}</wohnflaeche>{% endif -%}
-                    {%- if mapped.get('flaechen.nutzflaeche') is not none %}<nutzflaeche>{{ mapped.get('flaechen.nutzflaeche') }}</nutzflaeche>{% endif -%}
-                    {%- if mapped.get('flaechen.gesamtflaeche') is not none %}<gesamtflaeche>{{ mapped.get('flaechen.gesamtflaeche') }}</gesamtflaeche>{% endif -%}
-                    {%- if mapped.get('flaechen.anzahl_zimmer') is not none %}<anzahl_zimmer>{{ mapped.get('flaechen.anzahl_zimmer') }}</anzahl_zimmer>{% endif -%}
-                    {%- if mapped.get('flaechen.anzahl_schlafzimmer') is not none %}<anzahl_schlafzimmer>{{ mapped.get('flaechen.anzahl_schlafzimmer') }}</anzahl_schlafzimmer>{% endif -%}
-                    {%- if mapped.get('flaechen.anzahl_badezimmer') is not none %}<anzahl_badezimmer>{{ mapped.get('flaechen.anzahl_badezimmer') }}</anzahl_badezimmer>{% endif -%}
-                    {%- if mapped.get('flaechen.anzahl_balkone') is not none %}<anzahl_balkone>{{ mapped.get('flaechen.anzahl_balkone') }}</anzahl_balkone>{% endif -%}
+                    {%- if doc.builtup_area is not none %}<wohnflaeche>{{ doc.builtup_area }}</wohnflaeche>{% endif -%}
+                    {%- if doc.carpet_area is not none %}<nutzflaeche>{{ doc.carpet_area }}</nutzflaeche>{% endif -%}
+                    {%- if doc.custom_property_area is not none %}<gesamtflaeche>{{ doc.custom_property_area }}</gesamtflaeche>{% endif -%}
+                    {%- if doc.common_bathroom is not none %}<anzahl_badezimmer>{{ doc.common_bathroom }}</anzahl_badezimmer>{% endif -%}
+                    {%- if doc.master_bedroom is not none %}<anzahl_schlafzimmer>{{ doc.master_bedroom }}</anzahl_schlafzimmer>{% endif -%}
+                    {%- if doc.custom_balcony is not none %}<anzahl_balkone>{{ doc.custom_balcony }}</anzahl_balkone>{% endif -%}
+                    {%- if doc.bedroom is not none %}<anzahl_zimmer>{{ doc.bedroom }}</anzahl_zimmer>{% endif -%}
                 </flaechen>
-                {%- endif -%}
 
-                {%- set heiz_attrs = namespace(val="") -%}
-                {%- for key, val in mapped.items() if key.startswith("ausstattung.heizungsart@") -%}
-                    {%- set attr_name = key.split("@")[1] -%}
-                    {%- set heiz_attrs.val = heiz_attrs.val ~ ' ' ~ attr_name ~ '="' ~ val ~ '"' -%}
-                {%- endfor -%}
-                
-                {%- set bef_attrs = namespace(val="") -%}
-                {%- for key, val in mapped.items() if key.startswith("ausstattung.befeuerung@") -%}
-                    {%- set attr_name = key.split("@")[1] -%}
-                    {%- set bef_attrs.val = bef_attrs.val ~ ' ' ~ attr_name ~ '="' ~ val ~ '"' -%}
-                {%- endfor -%}
-
-                {%- set fahr_attrs = namespace(val="") -%}
-                {%- for key, val in mapped.items() if key.startswith("ausstattung.fahrstuhl@") -%}
-                    {%- set attr_name = key.split("@")[1] -%}
-                    {%- set fahr_attrs.val = fahr_attrs.val ~ ' ' ~ attr_name ~ '="' ~ val ~ '"' -%}
-                {%- endfor -%}
-
-                {%- set moeb_attrs = namespace(val="") -%}
-                {%- for key, val in mapped.items() if key.startswith("ausstattung.moebliert@") -%}
-                    {%- set attr_name = key.split("@")[1] -%}
-                    {%- set moeb_attrs.val = moeb_attrs.val ~ ' ' ~ attr_name ~ '="' ~ val ~ '"' -%}
-                {%- endfor -%}
-
-                {%- set bb_attrs = namespace(val="") -%}
-                {%- for key, val in mapped.items() if key.startswith("ausstattung.breitband_zugang@") -%}
-                    {%- set attr_name = key.split("@")[1] -%}
-                    {%- set bb_attrs.val = bb_attrs.val ~ ' ' ~ attr_name ~ '="' ~ val ~ '"' -%}
-                {%- endfor -%}
-
-                {%- set has_ausstattung = mapped.get('ausstattung.ausstatt_kategorie') or heiz_attrs.val or bef_attrs.val or fahr_attrs.val or moeb_attrs.val or bb_attrs.val or 'ausstattung.moebliert' in mapped -%}
-                {%- if has_ausstattung -%}
                 <ausstattung>
-                    {%- if mapped.get('ausstattung.ausstatt_kategorie') -%}
-                    <ausstatt_kategorie>{{ mapped.get('ausstattung.ausstatt_kategorie') }}</ausstatt_kategorie>
+                    {%- if doc.custom_type_of_heating -%}
+                    <heizungsart OFEN="{{ 'true' if doc.custom_type_of_heating == 'Einzelofen' else 'false' }}"
+                                 ZENTRAL="{{ 'true' if doc.custom_type_of_heating == 'Sammelheizung' else 'false' }}"/>
                     {%- endif -%}
-                    {%- if heiz_attrs.val -%}
-                    <heizungsart{{ heiz_attrs.val }}/>
+                    
+                    {%- if doc.custom_energy_carrier -%}
+                    <befeuerung GAS="{{ 'true' if doc.custom_energy_carrier == 'Gas' else 'false' }}"
+                               Solar="{{ 'true' if doc.custom_energy_carrier == 'Solar' else 'false' }}"
+                               OEL="{{ 'true' if doc.custom_energy_carrier == 'Öl' else 'false' }}"
+                               ELEKTRO="{{ 'true' if doc.custom_energy_carrier == 'Strom' else 'false' }}"
+                               KOHLE="{{ 'true' if doc.custom_energy_carrier == 'Kohle' else 'false' }}"
+                               FERN="{{ 'true' if doc.custom_energy_carrier == 'Fernwärme' else 'false' }}"/>
                     {%- endif -%}
-                    {%- if bef_attrs.val -%}
-                    <befeuerung{{ bef_attrs.val }}/>
-                    {%- endif -%}
-                    {%- if fahr_attrs.val -%}
-                    <fahrstuhl{{ fahr_attrs.val }}/>
-                    {%- endif -%}
-                    {%- if moeb_attrs.val or 'ausstattung.moebliert' in mapped -%}
-                    <moebliert{{ moeb_attrs.val }}/>
-                    {%- endif -%}
-                    {%- if bb_attrs.val -%}
-                    <breitband_zugang{{ bb_attrs.val }}/>
-                    {%- endif -%}
-                </ausstattung>
-                {%- endif -%}
 
-                {%- set ep_attrs = namespace(val="") -%}
-                {%- for key, val in mapped.items() if key.startswith("zustand_angaben.energiepass@") -%}
-                    {%- set attr_name = key.split("@")[1] -%}
-                    {%- set ep_attrs.val = ep_attrs.val ~ ' ' ~ attr_name ~ '="' ~ val ~ '"' -%}
-                {%- endfor -%}
-                {%- set has_ep = ep_attrs.val or mapped.get('zustand_angaben.energiepass.mitwarmwasser') is not none or doc.custom_energy_certificate -%}
-                {%- set has_zustand_angaben = mapped.get('zustand_angaben.baujahr') or mapped.get('zustand_angaben.zustand@zustand_art') or mapped.get('zustand_angaben.zustand_art') or has_ep -%}
-                {%- if has_zustand_angaben -%}
+                    {%- if doc.custom_elevator is not none -%}
+                    <fahrstuhl>{{ 'true' if doc.custom_elevator in [True, 'true', 1, '1'] else 'false' }}</fahrstuhl>
+                    {%- endif -%}
+                    
+                    {%- if doc.custom_garage_spaces is not none -%}
+                    <stellplatzart GARAGE="{{ 'true' if doc.custom_garage_spaces else 'false' }}"/>
+                    {%- endif -%}
+
+                    {%- if doc.facing -%}
+                    <ausricht_balkon_terrasse NORD="{{ 'true' if doc.facing == 'North' else 'false' }}"
+                                              NORDOST="{{ 'true' if doc.facing == 'North-East' else 'false' }}"
+                                              OST="{{ 'true' if doc.facing == 'East' else 'false' }}"
+                                              SUEDOST="{{ 'true' if doc.facing == 'South-East' else 'false' }}"
+                                              SUED="{{ 'true' if doc.facing == 'South' else 'false' }}"
+                                              SUEDWEST="{{ 'true' if doc.facing == 'South-West' else 'false' }}"
+                                              WEST="{{ 'true' if doc.facing == 'West' else 'false' }}"
+                                              NORDWEST="{{ 'true' if doc.facing == 'North-West' else 'false' }}"/>
+                    {%- endif -%}
+
+                    {%- if doc.furnished -%}
+                    <moebliert moeb="{{ 'VOLL' if doc.furnished in [True, 'true', 1, '1'] else 'NICHT_MOEBLIERT' }}"/>
+                    {%- endif -%}
+
+                    <!-- OPTIONAL EXTRA FITTING TAGS (Uncomment to use)
+                    <boden FLIESEN="{{ 'true' if doc.custom_tiles else 'false' }}" TEPPICH="{{ 'true' if doc.custom_carpet else 'false' }}" PARKETT="{{ 'true' if doc.custom_parquet else 'false' }}"/>
+                    <bad DUSCHE="{{ 'true' if doc.custom_shower else 'false' }}" WANNE="{{ 'true' if doc.custom_tub else 'false' }}" FENSTER="{{ 'true' if doc.custom_window else 'false' }}"/>
+                    <kueche EBK="{{ 'true' if doc.custom_fitted_kitchen else 'false' }}" OFFEN="{{ 'true' if doc.custom_open_kitchen else 'false' }}"/>
+                    <kamin>{{ 'true' if doc.custom_fireplace else 'false' }}</kamin>
+                    <klimatisiert>{{ 'true' if doc.custom_air_conditioned else 'false' }}</klimatisiert>
+                    <sauna>{{ 'true' if doc.custom_sauna else 'false' }}</sauna>
+                    <swimmingpool>{{ 'true' if doc.custom_pool else 'false' }}</swimmingpool>
+                    <wintergarten>{{ 'true' if doc.custom_conservatory else 'false' }}</wintergarten>
+                    <rollstuhlgerecht>{{ 'true' if doc.custom_wheelchair_accessible else 'false' }}</rollstuhlgerecht>
+                    <barrierefrei>{{ 'true' if doc.custom_barrier_free else 'false' }}</barrierefrei>
+                    {%- if doc.custom_has_cellar %}<unterkellert keller="{{ doc.custom_has_cellar }}"/><% endif -%}
+                    <abstellraum>{{ 'true' if doc.custom_utility_room else 'false' }}</abstellraum>
+                    <gaestewc>{{ 'true' if doc.custom_guest_toilet else 'false' }}</gaestewc>
+                    <seniorengerecht>{{ 'true' if doc.custom_senior_friendly else 'false' }}</seniorengerecht>
+                    -->
+                </ausstattung>
+
                 <zustand_angaben>
-                    {%- if mapped.get('zustand_angaben.baujahr') -%}
-                    <baujahr>{{ mapped.get('zustand_angaben.baujahr') }}</baujahr>
+                    {%- if doc.custom_year_of_construction -%}
+                    <baujahr>{{ doc.custom_year_of_construction }}</baujahr>
                     {%- endif -%}
-                    {%- if mapped.get('zustand_angaben.zustand@zustand_art') or mapped.get('zustand_angaben.zustand_art') -%}
-                    <zustand zustand_art="{{ mapped.get('zustand_angaben.zustand@zustand_art') or mapped.get('zustand_angaben.zustand_art') }}"/>
+                    {%- if doc.custom_last_renovation -%}
+                    <letztemodernisierung>{{ doc.custom_last_renovation }}</letztemodernisierung>
                     {%- endif -%}
-                    {%- if has_ep -%}
-                    <energiepass{{ ep_attrs.val }}>
-                        {%- set mitwarmwasser = mapped.get('zustand_angaben.energiepass.mitwarmwasser') -%}
-                        {%- if mitwarmwasser is not none -%}
-                        <mitwarmwasser>{{ 'true' if mitwarmwasser in [true, 'true', 1, '1'] else 'false' }}</mitwarmwasser>
-                        {%- endif -%}
+                    {%- if doc.custom_condition -%}
+                    <zustand zustand_art="{{ doc.custom_condition }}"/>
+                    {%- endif -%}
+                    {%- if doc.custom_hot_water_preparation -%}
+                    <energiepass>
+                        <mitwarmwasser>{{ 'true' if doc.custom_hot_water_preparation in ['Gastherme', 'Zentralheizung', 'E-Boiler', 'Elektrodurchlauferhitzer'] else 'false' }}</mitwarmwasser>
                     </energiepass>
                     {%- endif -%}
+
+                    <!-- OPTIONAL EXTRA CONDITION TAGS (Uncomment to use)
+                    {%- if doc.custom_building_age_category %}<alter alter_attr="{{ doc.custom_building_age_category }}"/><% endif -%}
+                    {%- if doc.custom_infrastructure_status %}<erschliessung erschl_attr="{{ doc.custom_infrastructure_status }}"/><% endif -%}
+                    {%- if doc.custom_building_regulations %}<bebaubar_nach bebaubar_attr="{{ doc.custom_building_regulations }}"/><% endif -%}
+                    -->
+
+                    {# --- Energy Certificate: pulls values dynamically from linked DocType and applies formatting --- #}
+                    {%- if doc.custom_energy_certificate -%}
+                        {%- set cert = frappe.get_doc("Energy Certificate Link", doc.custom_energy_certificate) -%}
+                        {%- if cert -%}
+                        <energiepass>
+                            <epart>{{ cert.energiepass_art or 'VERBRAUCH' }}</epart>
+                            {%- if cert.gültig_bis %}<gueltig_bis>{{ cert.gültig_bis | format_immowelt_date }}</gueltig_bis>{% endif -%}
+                            {%- if cert.energiepass_kennwert %}<energieverbrauchkennwert>{{ cert.energiepass_kennwert | format_decimal }}</energieverbrauchkennwert>{% endif -%}
+                            <mitwarmwasser>{{ 'true' if cert.mitwarmwasser in [True, 'true', 1, '1'] else 'false' }}</mitwarmwasser>
+                            {%- if cert.energieeffizienzklasse %}<wertklasse>{{ cert.energieeffizienzklasse }}</wertklasse>{% endif -%}
+                            {%- if cert.ausstelldatum %}<ausstelldatum>{{ cert.ausstelldatum }}</ausstelldatum>{% endif -%}
+                        </energiepass>
+                        {%- endif -%}
+                    {%- endif -%}
                 </zustand_angaben>
-                {%- endif -%}
 
-                {%- set found_bewertung = namespace(has_any=false) -%}
-                {%- for key in mapped.keys() if key.startswith("bewertung.feld.") -%}
-                    {%- set found_bewertung.has_any = true -%}
-                {%- endfor -%}
-                {%- if found_bewertung.has_any -%}
                 <bewertung>
-                    {%- set indices = [] -%}
-                    {%- for key in mapped.keys() if key.startswith("bewertung.feld.") -%}
-                        {%- set parts = key.split(".") -%}
-                        {%- if parts|length > 2 and parts[2].isdigit() and parts[2]|int not in indices -%}
-                            {%- set _ = indices.append(parts[2]|int) -%}
-                        {%- endif -%}
-                    {%- endfor -%}
-                    {%- for idx in indices|sort -%}
-                        {%- set name_path = "bewertung.feld." ~ idx ~ ".name" -%}
-                        {%- set wert_path = "bewertung.feld." ~ idx ~ ".wert" -%}
-                        <feld>
-                            <name>{{ mapped.get(name_path) }}</name>
-                            <wert>{{ mapped.get(wert_path) }}</wert>
-                        </feld>
-                    {%- endfor -%}
-                </bewertung>
-                {%- elif doc.custom_bewertungen or doc.get('bewertung') -%}
-                <bewertung>
-                    {%- set items = doc.custom_bewertungen or doc.get('bewertung') or [] -%}
-                    {%- for item in items -%}
                     <feld>
-                        <name>{{ item.name or item.get('name') }}</name>
-                        <wert>{{ item.wert or item.get('wert') }}</wert>
+                        <name>Anschaffungsdatum</name>
+                        <wert>{{ doc.custom_date_of_purchase }}</wert>
                     </feld>
-                    {%- endfor -%}
+                    <feld>
+                        <name>Bodenwert</name>
+                        <wert>{{ doc.custom_land_value_per_sqm }}</wert>
+                    </feld>
                 </bewertung>
-                {%- endif -%}
 
-                {%- set has_freitexte = mapped.get('freitexte.objekttitel') or mapped.get('freitexte.dreizeiler') or mapped.get('freitexte.lage') or mapped.get('freitexte.ausstatt_beschr') or mapped.get('freitexte.objektbeschreibung') or mapped.get('freitexte.sonstige_angaben') -%}
-                {%- if has_freitexte -%}
+                <!-- OPTIONAL INFRASTRUCTURE TAGS (Uncomment to use)
+                <infrastruktur>
+                    <zulieferung>{{ 'true' if doc.custom_delivery_possible else 'false' }}</zulieferung>
+                    {%- if doc.custom_view_type %}<ausblick blick="{{ doc.custom_view_type }}"/><% endif -%}
+                    {%- if doc.custom_distance_to_school %}<distanzen distanz_zu="HAUPTSCHULE">{{ doc.custom_distance_to_school }}</distanzen>{% endif -%}
+                    {%- if doc.custom_distance_to_lake %}<distanzen_sport distanz_zu_sport="SEE">{{ doc.custom_distance_to_lake }}</distanzen_sport>{% endif -%}
+                </infrastruktur>
+                -->
+
                 <freitexte>
-                    {%- if mapped.get('freitexte.objekttitel') -%}
-                    <objekttitel>{{ mapped.get('freitexte.objekttitel') }}</objekttitel>
+                    {%- if doc.custom_marketing_title -%}
+                    <objekttitel>{{ doc.custom_marketing_title }}</objekttitel>
                     {%- endif -%}
-                    {%- if mapped.get('freitexte.dreizeiler') -%}
-                    <dreizeiler>{{ mapped.get('freitexte.dreizeiler') }}</dreizeiler>
+                    {%- if doc.custom_location_short -%}
+                    <dreizeiler>{{ doc.custom_location_short }}</dreizeiler>
                     {%- endif -%}
-                    {%- if mapped.get('freitexte.lage') -%}
-                    <lage>{{ mapped.get('freitexte.lage') }}</lage>
+                    {%- if doc.custom_marketing_description -%}
+                    <objektbeschreibung>{{ doc.custom_marketing_description }}</objektbeschreibung>
                     {%- endif -%}
-                    {%- if mapped.get('freitexte.ausstatt_beschr') -%}
-                    <ausstatt_beschr>{{ mapped.get('freitexte.ausstatt_beschr') }}</ausstatt_beschr>
+                    {%- if doc.custom_additional_information -%}
+                    <sonstige_angaben>{{ doc.custom_additional_information }}</sonstige_angaben>
                     {%- endif -%}
-                    {%- if mapped.get('freitexte.objektbeschreibung') -%}
-                    <objektbeschreibung>{{ mapped.get('freitexte.objektbeschreibung') }}</objektbeschreibung>
-                    {%- endif -%}
-                    {%- if mapped.get('freitexte.sonstige_angaben') -%}
-                    <sonstige_angaben>{{ mapped.get('freitexte.sonstige_angaben') }}</sonstige_angaben>
-                    {%- endif -%}
-                    {%- if mapped.get('freitexte.objekt_text') is not none or 'freitexte.objekt_text' in mapped or mapped.get('freitexte.objekt_text@lang') -%}
-                    <objekt_text lang="{{ mapped.get('freitexte.objekt_text@lang') or '' }}"/>
-                    {%- endif -%}
+                    <objekt_text lang="GER"/>
                 </freitexte>
-                {%- endif -%}
 
-                {%- set found_anhaenge = namespace(has_any=false) -%}
-                {%- for key in mapped.keys() if key.startswith("anhaenge.anhang.") -%}
-                    {%- set found_anhaenge.has_any = true -%}
-                {%- endfor -%}
-                {%- if found_anhaenge.has_any -%}
+                {# --- Attachment Gallery: dynamically groups hero images as TITELBILD and others as BILD --- #}
+                {%- if doc.custom_image_gallery -%}
                 <anhaenge>
-                    {%- set indices = [] -%}
-                    {%- for key in mapped.keys() if key.startswith("anhaenge.anhang.") -%}
-                        {%- set parts = key.split(".") -%}
-                        {%- if parts|length > 2 and parts[2].isdigit() and parts[2]|int not in indices -%}
-                            {%- set _ = indices.append(parts[2]|int) -%}
+                    {# --- Check if any image is explicitly flagged as hero_image --- #}
+                    {%- set ns_hero = namespace(has_hero=false) -%}
+                    {%- for row in doc.custom_image_gallery -%}
+                        {%- if row.is_hero_image -%}
+                            {%- set ns_hero.has_hero = true -%}
                         {%- endif -%}
                     {%- endfor -%}
-                    {%- for idx in indices|sort -%}
-                        {%- set pfad_path = "anhaenge.anhang." ~ idx ~ ".daten.pfad" -%}
-                        {%- set format_path = "anhaenge.anhang." ~ idx ~ ".format" -%}
-                        {%- set title_path = "anhaenge.anhang." ~ idx ~ ".anhangtitel" -%}
-                        {%- set loc_path = "anhaenge.anhang." ~ idx ~ "@location" -%}
-                        {%- set grp_path = "anhaenge.anhang." ~ idx ~ "@gruppe" -%}
-                        {%- set pfad_val = mapped.get(pfad_path) -%}
-                        {%- if pfad_val -%}
-                        <anhang location="{{ mapped.get(loc_path) or '' }}"{% if mapped.get(grp_path) %} gruppe="{{ mapped.get(grp_path) }}"{% endif %}>
-                            {%- if mapped.get(title_path) -%}
-                            <anhangtitel>{{ mapped.get(title_path) }}</anhangtitel>
-                            {%- endif -%}
-                            <format>{{ mapped.get(format_path) or '' }}</format>
-                            <daten>
-                                <pfad>{{ pfad_val }}</pfad>
-                            </daten>
-                        </anhang>
-                        {%- endif -%}
-                    {%- endfor -%}
-                </anhaenge>
-                {%- elif doc.custom_image_gallery -%}
-                <anhaenge>
+
                     {%- for row in doc.custom_image_gallery -%}
                         {%- set img_path = row.get("picture") -%}
                         {%- if img_path -%}
-                            {%- set ext = img_path.split('.')[-1].upper() if '.' in img_path else 'JPEG' -%}
-                            {%- set format_map = {'JPG': 'JPEG', 'JPEG': 'JPEG', 'PNG': 'PNG', 'GIF': 'GIF', 'WEBP': 'JPEG'} -%}
-                            {%- set fmt = format_map.get(ext, 'JPEG') -%}
-                            {%- set base_media_url = source.base_media_url or frappe.utils.get_url() -%}
-                            {%- set full_path = img_path if img_path.startswith(('http://', 'https://')) else (base_media_url.rstrip('/') ~ '/' ~ img_path.lstrip('/')) -%}
-                            <anhang location="EXTERN" gruppe="{{ 'TITELBILD' if loop.first else 'INNENANSICHTEN' }}">
-                                <format>{{ fmt }}</format>
+                            {# --- If hero is found, use is_hero_image. Otherwise fallback to first image as hero --- #}
+                            {%- set is_hero = false -%}
+                            {%- if ns_hero.has_hero -%}
+                                {%- if row.is_hero_image -%}
+                                    {%- set is_hero = true -%}
+                                {%- endif -%}
+                            {%- else -%}
+                                {%- if loop.first -%}
+                                    {%- set is_hero = true -%}
+                                {%- endif -%}
+                            {%- endif -%}
+                            
+                            <anhang location="EXTERN" gruppe="{{ 'TITELBILD' if is_hero else 'BILD' }}">
+                                <format>{{ img_path.split('.')[-1].upper() if '.' in img_path else 'JPEG' }}</format>
                                 <daten>
-                                    <pfad>{{ full_path }}</pfad>
+                                    <pfad>{{ img_path if img_path.startswith(('http://', 'https://')) else ((source.base_media_url or frappe.utils.get_url()).rstrip('/') ~ '/' ~ img_path.lstrip('/')) }}</pfad>
                                 </daten>
                             </anhang>
                         {%- endif -%}
@@ -506,31 +302,36 @@ OPENIMMO_JINJA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
                 </anhaenge>
                 {%- endif -%}
 
-                {%- set has_verwaltung_objekt = mapped.get('verwaltung_objekt.verfuegbar_ab') or mapped.get('verwaltung_objekt.haustiere') is not none or mapped.get('verwaltung_objekt.denkmalgeschuetzt') is not none -%}
-                {%- if has_verwaltung_objekt -%}
                 <verwaltung_objekt>
-                    {%- if mapped.get('verwaltung_objekt.verfuegbar_ab') -%}
-                    <verfuegbar_ab>{{ mapped.get('verwaltung_objekt.verfuegbar_ab') }}</verfuegbar_ab>
+                    {%- if doc.custom_marketing_status -%}
+                    <reserviert>{{ doc.custom_marketing_status }}</reserviert>
                     {%- endif -%}
-                    {%- if mapped.get('verwaltung_objekt.haustiere') is not none -%}
-                    <haustiere>{{ 'true' if mapped.get('verwaltung_objekt.haustiere') in [true, 'true', 1, '1'] else 'false' }}</haustiere>
+                    {%- if doc.status -%}
+                    <vermietet>{{ 'true' if doc.status == 'Rented' else 'false' }}</vermietet>
                     {%- endif -%}
-                    {%- if mapped.get('verwaltung_objekt.denkmalgeschuetzt') is not none -%}
-                    <denkmalgeschuetzt>{{ 'true' if mapped.get('verwaltung_objekt.denkmalgeschuetzt') in [true, 'true', 1, '1'] else 'false' }}</denkmalgeschuetzt>
+                    {%- if doc.custom_available_from -%}
+                    <verfuegbar_ab>{{ doc.custom_available_from }}</verfuegbar_ab>
+                    {%- endif -%}
+                    {%- if doc.custom_pets_allowed is not none -%}
+                    <haustiere>{{ 'true' if doc.custom_pets_allowed in [True, 'true', 1, '1'] else 'false' }}</haustiere>
+                    {%- endif -%}
+                    {%- if doc.custom_monument_protection is not none -%}
+                    <denkmalgeschuetzt>{{ 'true' if doc.custom_monument_protection in [True, 'true', 1, '1'] else 'false' }}</denkmalgeschuetzt>
                     {%- endif -%}
                 </verwaltung_objekt>
-                {%- endif -%}
 
                 <verwaltung_techn>
-                    <objektnr_intern>{{ mapped.get('verwaltung_techn.objektnr_intern') or '' }}</objektnr_intern>
-                    <objektnr_extern>{{ mapped.get('verwaltung_techn.objektnr_extern') or '' }}</objektnr_extern>
-                    <aktion aktionart="{{ mapped.get('verwaltung_techn.aktion@aktionart') or mapped.get('verwaltung_techn.aktion') or source.transfer_mode or '' }}"/>
-                    <openimmo_obid>{{ mapped.get('verwaltung_techn.openimmo_obid') or '' }}</openimmo_obid>
-                    <stand_vom>{{ mapped.get('verwaltung_techn.stand_vom') or '' }}</stand_vom>
+                    <objektnr_intern>{{ doc.name }}</objektnr_intern>
+                    <objektnr_extern>{{ doc.name }}</objektnr_extern>
+                    <aktion aktionart="{{ source.transfer_mode }}"/>
+                    <openimmo_obid>{{ doc.name }}</openimmo_obid>
+                    <stand_vom>{{ doc.modified }}</stand_vom>
+                    {%- if doc.custom_available_from -%}
+                    <aktiv_von>{{ doc.custom_available_from }}</aktiv_von>
+                    {%- endif -%}
                 </verwaltung_techn>
             </immobilie>
         {%- endfor -%}
     </anbieter>
 </openimmo>
 """
-
