@@ -30,7 +30,7 @@ OPENIMMO_JINJA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
                     {# --- Setup namespace to fetch usage attributes dynamically --- #}
                     {%- set ns_na = namespace(wohnen="false", gewerbe="false", anlage="false", waz="false") -%}
                     {%- if doc.custom_property_type -%}
-                        {%- set prop_type = frappe.get_doc("Property Type", doc.custom_property_type) -%}
+                        {%- set prop_type = get_document("Property Type", doc.custom_property_type) -%}
                         {%- if prop_type -%}
                             {%- set ns_na.wohnen = "true" if prop_type.use_residential else "false" -%}
                             {%- set ns_na.gewerbe = "true" if prop_type.use_commercial else "false" -%}
@@ -43,7 +43,7 @@ OPENIMMO_JINJA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
                     
                     <objektart>
                         {%- if doc.custom_property_type -%}
-                            {%- set prop_type = frappe.get_doc("Property Type", doc.custom_property_type) -%}
+                            {%- set prop_type = get_document("Property Type", doc.custom_property_type) -%}
                             {%- if prop_type -%}
                                 {%- set objektart = prop_type.openimmo_objektart -%}
                                 {%- set attribute = prop_type.openimmo_attribute -%}
@@ -222,7 +222,7 @@ OPENIMMO_JINJA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
 
                     {# --- Energy Certificate: pulls values dynamically from linked DocType and applies formatting --- #}
                     {%- if doc.custom_energy_certificate -%}
-                        {%- set cert = frappe.get_doc("Energy Certificate Link", doc.custom_energy_certificate) -%}
+                        {%- set cert = get_document("Energy Certificate Link", doc.custom_energy_certificate) -%}
                         {%- if cert -%}
                         <energiepass>
                             <epart>{{ cert.energiepass_art or 'VERBRAUCH' }}</epart>
