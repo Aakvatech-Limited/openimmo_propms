@@ -12,8 +12,9 @@ OPENIMMO_JINJA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
                   timestamp="{{ frappe.utils.now_datetime().strftime('%Y-%m-%dT%H:%M:%S') }}"
                   {%- if source.regi_id %} regi_id="{{ source.regi_id }}"{% endif -%}/>
     <anbieter>
+        {%- set first_doc = all_records[0].doc if all_records else doc -%}
         <anbieternr>{{ source.anbieter_id }}</anbieternr>
-        <firma>{{ doc.company }}</firma>
+        <firma>{{ first_doc.company or "" }}</firma>
         <openimmo_anid>{{ source.openimmo_anid }}</openimmo_anid>
 
         {# --- Setup Records List for both Single & Batch packaging --- #}
@@ -66,34 +67,38 @@ OPENIMMO_JINJA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
                 </objektkategorie>
 
                 <geo>
-                    {%- if doc.custom_pincode %}<plz>{{ doc.custom_pincode }}</plz>{% endif -%}
-                    {%- if doc.custom_property_city %}<ort>{{ doc.custom_property_city }}</ort>{% endif -%}
+                    {%- if doc.custom_pincode -%}
+                    <plz>{{ doc.custom_pincode or "" }}</plz>
+                    {%- endif -%}
+                    {%- if doc.custom_property_city or (not doc.custom_pincode and not doc.custom_latitude and not doc.custom_longitude) -%}
+                    <ort>{{ doc.custom_property_city or "" }}</ort>
+                    {%- endif -%}
                     {%- if doc.custom_latitude or doc.custom_longitude -%}
                     <geokoordinaten breitengrad="{{ doc.custom_latitude }}" laengengrad="{{ doc.custom_longitude }}"/>
                     {%- endif -%}
-                    {%- if doc.custom_property_street %}<strasse>{{ doc.custom_property_street }}</strasse>{% endif -%}
-                    {%- if doc.custom_house_number %}<hausnummer>{{ doc.custom_house_number }}</hausnummer>{% endif -%}
+                    {%- if doc.custom_property_street %}<strasse>{{ doc.custom_property_street or "" }}</strasse>{% endif -%}
+                    {%- if doc.custom_house_number %}<hausnummer>{{ doc.custom_house_number or "" }}</hausnummer>{% endif -%}
                     <land iso_land="DEU"/>
-                    {%- if doc.custom_district %}<regionaler_zusatz>{{ doc.custom_district }}</regionaler_zusatz>{% endif -%}
+                    {%- if doc.custom_flurstück %}<flurstueck>{{ doc.custom_flurstück or "" }}</flurstueck>{% endif -%}
                     {%- if doc.custom_level_in_the_building is not none and doc.custom_level_in_the_building != "" -%}
-                    <etage>{{ doc.custom_level_in_the_building }}</etage>
+                    <etage>{{ doc.custom_level_in_the_building or "" }}</etage>
                     {%- endif -%}
+                    {%- if doc.custom_district %}<regionaler_zusatz>{{ doc.custom_district or "" }}</regionaler_zusatz>{% endif -%}
                     <karten_makro>true</karten_makro>
-                    {%- if doc.custom_flurstück %}<flurstueck>{{ doc.custom_flurstück }}</flurstueck>{% endif -%}
                 </geo>
 
                 <kontaktperson>
                     <email_zentrale>vermietung@axessio.de</email_zentrale>
-                    {%- if doc.custom_contact_email %}<email_direkt>{{ doc.custom_contact_email }}</email_direkt>{% endif -%}
+                    {%- if doc.custom_contact_email %}<email_direkt>{{ doc.custom_contact_email or "" }}</email_direkt>{% endif -%}
                     <tel_zentrale>0000000000</tel_zentrale>
+                    {%- if doc.custom_contact_phone %}<tel_durchw>{{ doc.custom_contact_phone or "" }}</tel_durchw>{% endif -%}
                     <tel_handy>0000000000</tel_handy>
-                    {%- if doc.custom_contact_phone %}<tel_direkt>{{ doc.custom_contact_phone }}</tel_direkt>{% endif -%}
-                    {%- if doc.custom_property_manager %}<name>{{ doc.custom_property_manager }}</name>{% endif -%}
+                    <name>{{ doc.custom_property_manager or "" }}</name>
                 </kontaktperson>
 
                 {%- if doc.custom_building_superintendent -%}
                 <weitere_adresse adressart="Hausmeister">
-                    <name>{{ doc.custom_building_superintendent }}</name>
+                    <name>{{ doc.custom_building_superintendent or "" }}</name>
                 </weitere_adresse>
                 {%- endif -%}
 
@@ -104,36 +109,55 @@ OPENIMMO_JINJA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
                     {%- if doc.custom_plus_19_vat is not none -%}
                     <zzg_mehrwertsteuer>{{ 'true' if doc.custom_plus_19_vat in [True, 'true', 1, '1'] else 'false' }}</zzg_mehrwertsteuer>
                     {%- endif -%}
-                    {%- if doc.custom_commissionfree is not none -%}
-                    <provisionspflichtig>{{ 'false' if doc.custom_commissionfree in [True, 'true', 1, '1'] else 'true' }}</provisionspflichtig>
-                    {%- endif -%}
-                    {%- if doc.custom_commission_description %}<courtage_hinweis>{{ doc.custom_commission_description }}</courtage_hinweis>{% endif -%}
-                    <waehrung iso_waehrung="EUR"/>
-                    {%- if doc.security_deposit is not none %}<kaution>{{ doc.security_deposit }}</kaution>{% endif -%}
-                    {%- if doc.custom_deposit is not none %}<kaution_text>{{ doc.custom_deposit }}</kaution_text>{% endif -%}
 
-                    {#- OPTIONAL EXTRA PRICE TAGS (Uncomment to use)
+                    {#- OPTIONAL EXTRA PRICE TAGS Part 1 (Uncomment to use)
                     {%- if doc.custom_flat_rate_rent is not none %}<pauschalmiete>{{ doc.custom_flat_rate_rent }}</pauschalmiete>{% endif -%}
                     {%- if doc.custom_net_operating_costs is not none %}<betriebskostennetto>{{ doc.custom_net_operating_costs }}</betriebskostennetto>{% endif -%}
                     {%- if doc.custom_gross_rent is not none %}<gesamtmietebrutto>{{ doc.custom_gross_rent }}</gesamtmietebrutto>{% endif -%}
+                    -#}
+
+                    {%- if doc.custom_commissionfree is not none -%}
+                    <provisionspflichtig>{{ 'false' if doc.custom_commissionfree in [True, 'true', 1, '1'] else 'true' }}</provisionspflichtig>
+                    {%- endif -%}
+                    {%- if doc.custom_commission_description %}<courtage_hinweis>{{ doc.custom_commission_description or "" }}</courtage_hinweis>{% endif -%}
+                    <waehrung iso_waehrung="EUR"/>
+
+                    {#- OPTIONAL EXTRA PRICE TAGS Part 2 (Uncomment to use)
                     {%- if doc.custom_development_costs is not none %}<erschliessungskosten>{{ doc.custom_development_costs }}</erschliessungskosten>{% endif -%}
-                    {%- if doc.custom_carport_rent is not none %}<stp_carport stellplatzmiete="{{ doc.custom_carport_rent }}"/></preise>{% endif -%}
-                    {%- if doc.custom_parking_rent is not none %}<stp_freiplatz stellplatzmiete="{{ doc.custom_parking_rent }}"/></preise>{% endif -%}
+                    -#}
+
+                    {%- if doc.security_deposit is not none %}<kaution>{{ doc.security_deposit }}</kaution>{% endif -%}
+                    {%- if doc.custom_deposit is not none %}<kaution_text>{{ doc.custom_deposit or "" }}</kaution_text>{% endif -%}
+
+                    {#- OPTIONAL EXTRA PRICE TAGS Part 3 (Uncomment to use)
+                    {%- if doc.custom_carport_rent is not none %}<stp_carport stellplatzmiete="{{ doc.custom_carport_rent }}"/>{% endif -%}
+                    {%- if doc.custom_parking_rent is not none %}<stp_freiplatz stellplatzmiete="{{ doc.custom_parking_rent }}"/>{% endif -%}
                     -#}
                 </preise>
 
                 <flaechen>
-                    {%- if doc.builtup_area is not none %}<wohnflaeche>{{ doc.builtup_area }}</wohnflaeche>{% endif -%}
-                    {%- if doc.carpet_area is not none %}<nutzflaeche>{{ doc.carpet_area }}</nutzflaeche>{% endif -%}
-                    {%- if doc.custom_property_area is not none %}<gesamtflaeche>{{ doc.custom_property_area }}</gesamtflaeche>{% endif -%}
-                    {%- if doc.common_bathroom is not none %}<anzahl_badezimmer>{{ doc.common_bathroom }}</anzahl_badezimmer>{% endif -%}
-                    {%- if doc.master_bedroom is not none %}<anzahl_schlafzimmer>{{ doc.master_bedroom }}</anzahl_schlafzimmer>{% endif -%}
-                    {%- if doc.custom_balcony is not none %}<anzahl_balkone>{{ doc.custom_balcony }}</anzahl_balkone>{% endif -%}
-                    {%- if doc.bedroom is not none %}<anzahl_zimmer>{{ doc.bedroom }}</anzahl_zimmer>{% endif -%}
-                    {%- if doc.custom_garage_spaces is not none %}<anzahl_stellplaetze>{{ doc.custom_garage_spaces }}</anzahl_stellplaetze>{% endif -%}
+                    {%- if doc.builtup_area is not none and doc.builtup_area | float > 0 %}<wohnflaeche>{{ doc.builtup_area }}</wohnflaeche>{% endif -%}
+                    {%- if doc.carpet_area is not none and doc.carpet_area | float > 0 %}<nutzflaeche>{{ doc.carpet_area }}</nutzflaeche>{% endif -%}
+                    {%- if doc.custom_property_area is not none and doc.custom_property_area | float > 0 %}<gesamtflaeche>{{ doc.custom_property_area }}</gesamtflaeche>{% endif -%}
+                    {%- if doc.bedroom is not none and doc.bedroom | float > 0 %}<anzahl_zimmer>{{ doc.bedroom }}</anzahl_zimmer>{% endif -%}
+                    {%- if doc.master_bedroom is not none and doc.master_bedroom | float > 0 %}<anzahl_schlafzimmer>{{ doc.master_bedroom }}</anzahl_schlafzimmer>{% endif -%}
+                    {%- if doc.common_bathroom is not none and doc.common_bathroom | float > 0 %}<anzahl_badezimmer>{{ doc.common_bathroom }}</anzahl_badezimmer>{% endif -%}
+                    {%- if doc.custom_balcony is not none and doc.custom_balcony | float > 0 %}<anzahl_balkone>{{ doc.custom_balcony }}</anzahl_balkone>{% endif -%}
+                    {%- if doc.custom_garage_spaces is not none and doc.custom_garage_spaces | float > 0 %}<anzahl_stellplaetze>{{ doc.custom_garage_spaces }}</anzahl_stellplaetze>{% endif -%}
                 </flaechen>
 
                 <ausstattung>
+                    {%- if doc.custom_quality_category -%}
+                    <ausstatt_kategorie>{{ doc.custom_quality_category }}</ausstatt_kategorie>
+                    {%- endif -%}
+
+                    {#- OPTIONAL EXTRA FITTING TAGS Part 1 (Uncomment to use)
+                    <bad DUSCHE="{{ 'true' if doc.custom_shower else 'false' }}" WANNE="{{ 'true' if doc.custom_tub else 'false' }}" FENSTER="{{ 'true' if doc.custom_window else 'false' }}"/>
+                    <kueche EBK="{{ 'true' if doc.custom_fitted_kitchen else 'false' }}" OFFEN="{{ 'true' if doc.custom_open_kitchen else 'false' }}"/>
+                    <boden FLIESEN="{{ 'true' if doc.custom_tiles else 'false' }}" TEPPICH="{{ 'true' if doc.custom_carpet else 'false' }}" PARKETT="{{ 'true' if doc.custom_parquet else 'false' }}"/>
+                    <kamin>{{ 'true' if doc.custom_fireplace else 'false' }}</kamin>
+                    -#}
+
                     {%- if doc.custom_type_of_heating -%}
                     <heizungsart OFEN="{{ 'true' if doc.custom_type_of_heating == 'Einzelofen' else 'false' }}"
                                  ZENTRAL="{{ 'true' if doc.custom_type_of_heating == 'Sammelheizung' else 'false' }}"/>
@@ -141,7 +165,7 @@ OPENIMMO_JINJA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
                     
                     {%- if doc.custom_energy_carrier or doc.custom_hot_water_preparation -%}
                     <befeuerung GAS="{{ 'true' if doc.custom_energy_carrier == 'Gas' else 'false' }}"
-                               Solar="{{ 'true' if doc.custom_energy_carrier == 'Solar' else 'false' }}"
+                               SOLAR="{{ 'true' if doc.custom_energy_carrier == 'Solar' else 'false' }}"
                                OEL="{{ 'true' if doc.custom_energy_carrier == 'Öl' else 'false' }}"
                                ELEKTRO="{{ 'true' if doc.custom_energy_carrier == 'Strom' else 'false' }}"
                                KOHLE="{{ 'true' if doc.custom_energy_carrier == 'Kohle' else 'false' }}"
@@ -149,20 +173,16 @@ OPENIMMO_JINJA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
                                WASSER-ELEKTRO="{{ 'true' if doc.custom_hot_water_preparation in ['E-Boiler', 'Elektrodurchlauferhitzer'] else 'false' }}"/>
                     {%- endif -%}
 
+                    {#- OPTIONAL EXTRA FITTING TAGS Part 2 (Uncomment to use)
+                    <klimatisiert>{{ 'true' if doc.custom_air_conditioned else 'false' }}</klimatisiert>
+                    -#}
+
                     {%- if doc.custom_elevator is not none -%}
                     <fahrstuhl PERSONEN="{{ 'true' if doc.custom_elevator in [True, 'true', 1, '1'] else 'false' }}"/>
                     {%- endif -%}
                     
                     {%- if doc.custom_garage_spaces is not none -%}
                     <stellplatzart GARAGE="{{ 'true' if doc.custom_garage_spaces else 'false' }}"/>
-                    {%- endif -%}
-
-                    {%- if doc.custom_quality_category -%}
-                    <ausstatt_kategorie>{{ doc.custom_quality_category }}</ausstatt_kategorie>
-                    {%- endif -%}
-
-                    {%- if doc.custom_internet_type -%}
-                    <breitband_zugang art="{{ doc.custom_internet_type }}" speed="1000"/>
                     {%- endif -%}
 
                     {%- if doc.facing -%}
@@ -180,18 +200,20 @@ OPENIMMO_JINJA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
                     <moebliert moeb="{{ 'VOLL' if doc.furnished in [True, 'true', 1, '1'] else 'NICHT_MOEBLIERT' }}"/>
                     {%- endif -%}
 
-                    {#- OPTIONAL EXTRA FITTING TAGS (Uncomment to use)
-                    <boden FLIESEN="{{ 'true' if doc.custom_tiles else 'false' }}" TEPPICH="{{ 'true' if doc.custom_carpet else 'false' }}" PARKETT="{{ 'true' if doc.custom_parquet else 'false' }}"/>
-                    <bad DUSCHE="{{ 'true' if doc.custom_shower else 'false' }}" WANNE="{{ 'true' if doc.custom_tub else 'false' }}" FENSTER="{{ 'true' if doc.custom_window else 'false' }}"/>
-                    <kueche EBK="{{ 'true' if doc.custom_fitted_kitchen else 'false' }}" OFFEN="{{ 'true' if doc.custom_open_kitchen else 'false' }}"/>
-                    <kamin>{{ 'true' if doc.custom_fireplace else 'false' }}</kamin>
-                    <klimatisiert>{{ 'true' if doc.custom_air_conditioned else 'false' }}</klimatisiert>
+                    {#- OPTIONAL EXTRA FITTING TAGS Part 3 (Uncomment to use)
+                    <rollstuhlgerecht>{{ 'true' if doc.custom_wheelchair_accessible else 'false' }}</rollstuhlgerecht>
+                    <barrierefrei>{{ 'true' if doc.custom_barrier_free else 'false' }}</barrierefrei>
                     <sauna>{{ 'true' if doc.custom_sauna else 'false' }}</sauna>
                     <swimmingpool>{{ 'true' if doc.custom_pool else 'false' }}</swimmingpool>
                     <wintergarten>{{ 'true' if doc.custom_conservatory else 'false' }}</wintergarten>
-                    <rollstuhlgerecht>{{ 'true' if doc.custom_wheelchair_accessible else 'false' }}</rollstuhlgerecht>
-                    <barrierefrei>{{ 'true' if doc.custom_barrier_free else 'false' }}</barrierefrei>
-                    {%- if doc.custom_has_cellar %}<unterkellert keller="{{ doc.custom_has_cellar }}" />{% endif -%}
+                    -#}
+
+                    {%- if doc.custom_internet_type -%}
+                    <breitband_zugang art="{{ doc.custom_internet_type or "" }}" speed="1000"/>
+                    {%- endif -%}
+
+                    {#- OPTIONAL EXTRA FITTING TAGS Part 4 (Uncomment to use)
+                    {%- if doc.custom_has_cellar %}<unterkellert keller="{{ doc.custom_has_cellar or "" }}" />{% endif -%}
                     <abstellraum>{{ 'true' if doc.custom_utility_room else 'false' }}</abstellraum>
                     <gaestewc>{{ 'true' if doc.custom_guest_toilet else 'false' }}</gaestewc>
                     <seniorengerecht>{{ 'true' if doc.custom_senior_friendly else 'false' }}</seniorengerecht>
@@ -200,80 +222,88 @@ OPENIMMO_JINJA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
 
                 <zustand_angaben>
                     {%- if doc.custom_year_of_construction -%}
-                    <baujahr>{{ doc.custom_year_of_construction }}</baujahr>
+                    <baujahr>{{ doc.custom_year_of_construction or "" }}</baujahr>
                     {%- endif -%}
                     {%- if doc.custom_last_renovation -%}
-                    <letztemodernisierung>{{ doc.custom_last_renovation }}</letztemodernisierung>
+                    <letztemodernisierung>{{ doc.custom_last_renovation or "" }}</letztemodernisierung>
                     {%- endif -%}
                     {%- if doc.custom_condition -%}
-                    <zustand zustand_art="{{ doc.custom_condition }}"/>
+                    <zustand zustand_art="{{ doc.custom_condition or "" }}"/>
                     {%- endif -%}
+
+                    {#- OPTIONAL EXTRA CONDITION TAGS (Uncomment to use)
+                    {%- if doc.custom_building_age_category %}<alter alter_attr="{{ doc.custom_building_age_category or "" }}" />{% endif -%}
+                    {%- if doc.custom_building_regulations %}<bebaubar_nach bebaubar_attr="{{ doc.custom_building_regulations or "" }}" />{% endif -%}
+                    {%- if doc.custom_infrastructure_status %}<erschliessung erschl_attr="{{ doc.custom_infrastructure_status or "" }}" />{% endif -%}
+                    -#}
+
                     {%- if doc.custom_hot_water_preparation -%}
                     <energiepass>
                         <mitwarmwasser>{{ 'true' if doc.custom_hot_water_preparation in ['Gastherme', 'Zentralheizung', 'E-Boiler', 'Elektrodurchlauferhitzer'] else 'false' }}</mitwarmwasser>
                     </energiepass>
                     {%- endif -%}
 
-                    {#- OPTIONAL EXTRA CONDITION TAGS (Uncomment to use)
-                    {%- if doc.custom_building_age_category %}<alter alter_attr="{{ doc.custom_building_age_category }}" />{% endif -%}
-                    {%- if doc.custom_infrastructure_status %}<erschliessung erschl_attr="{{ doc.custom_infrastructure_status }}" />{% endif -%}
-                    {%- if doc.custom_building_regulations %}<bebaubar_nach bebaubar_attr="{{ doc.custom_building_regulations }}" />{% endif -%}
-                    -#}
-
-                    {# --- Energy Certificate: pulls values dynamically from linked DocType and applies formatting --- #}
-                    {%- if doc.custom_energy_certificate -%}
-                        {%- set cert = get_document("Energy Certificate Link", doc.custom_energy_certificate) -%}
-                        {%- if cert -%}
-                        <energiepass>
-                            <epart>{{ cert.energiepass_art or 'VERBRAUCH' }}</epart>
-                            {%- if cert.gültig_bis %}<gueltig_bis>{{ cert.gültig_bis | format_immowelt_date }}</gueltig_bis>{% endif -%}
-                            {%- if cert.energiepass_kennwert %}<energieverbrauchkennwert>{{ cert.energiepass_kennwert | format_decimal }}</energieverbrauchkennwert>{% endif -%}
-                            <mitwarmwasser>{{ 'true' if cert.mitwarmwasser in [True, 'true', 1, '1'] else 'false' }}</mitwarmwasser>
-                            {%- if cert.energieeffizienzklasse %}<wertklasse>{{ cert.energieeffizienzklasse }}</wertklasse>{% endif -%}
-                            {%- if cert.ausstelldatum %}<ausstelldatum>{{ cert.ausstelldatum }}</ausstelldatum>{% endif -%}
-                        </energiepass>
+                    {# --- Energy Certificate: pulls values dynamically from custom Energy Certificate DocType using the property link --- #}
+                    {%- set cert = get_document("Energy Certificate", filters={"property": doc.name}) -%}
+                    {%- if cert -%}
+                    <energiepass>
+                        {%- if cert.energy_certificate_type -%}
+                        <epart>{{ cert.energy_certificate_type }}</epart>
                         {%- endif -%}
+                        {%- if cert.valid_until %}<gueltig_bis>{{ cert.valid_until | format_immowelt_date }}</gueltig_bis>{% endif -%}
+                        {%- if cert.energy_value %}<energieverbrauchkennwert>{{ cert.energy_value | format_decimal }}</energieverbrauchkennwert>{% endif -%}
+                        <mitwarmwasser>{{ 'true' if cert.with_hot_water in [True, 'true', 1, '1'] else 'false' }}</mitwarmwasser>
+                        {%- if cert.final_energy_demand %}<endenergiebedarf>{{ cert.final_energy_demand | format_decimal }}</endenergiebedarf>{% endif -%}
+                        {%- if cert.primary_energy_source %}<primaerenergietraeger>{{ cert.primary_energy_source }}</primaerenergietraeger>{% endif -%}
+                        {%- if cert.energy_class %}<wertklasse>{{ cert.energy_class or "" }}</wertklasse>{% endif -%}
+                        {%- if cert.issue_date %}<ausstelldatum>{{ cert.issue_date or "" }}</ausstelldatum>{% endif -%}
+                        {%- if cert.enev_year %}<jahrgang>{{ cert.enev_year or "" }}</jahrgang>{% endif -%}
+                    </energiepass>
+                    {%- endif -%}
+
+                    {%- if doc.custom_marketing_status -%}
+                    <verkaufstatus stand="{{ 'RESERVIERT' if doc.custom_marketing_status in ['RESERVIERT', 'Reserviert', 'true', True, 1, '1'] else 'OFFEN' }}"/>
                     {%- endif -%}
                 </zustand_angaben>
 
                 <bewertung>
                     <feld>
                         <name>Anschaffungsdatum</name>
-                        <wert>{{ doc.custom_date_of_purchase }}</wert>
+                        <wert>{{ doc.custom_date_of_purchase or "" }}</wert>
                     </feld>
                     <feld>
                         <name>Bodenwert</name>
-                        <wert>{{ doc.custom_land_value_per_sqm }}</wert>
+                        <wert>{{ doc.custom_land_value_per_sqm or "" }}</wert>
                     </feld>
                 </bewertung>
 
                 {#- OPTIONAL INFRASTRUCTURE TAGS (Uncomment to use)
                 <infrastruktur>
                     <zulieferung>{{ 'true' if doc.custom_delivery_possible else 'false' }}</zulieferung>
-                    {%- if doc.custom_view_type %}<ausblick blick="{{ doc.custom_view_type }}" />{% endif -%}
-                    {%- if doc.custom_distance_to_school %}<distanzen distanz_zu="HAUPTSCHULE">{{ doc.custom_distance_to_school }}</distanzen>{% endif -%}
-                    {%- if doc.custom_distance_to_lake %}<distanzen_sport distanz_zu_sport="SEE">{{ doc.custom_distance_to_lake }}</distanzen_sport>{% endif -%}
+                    {%- if doc.custom_view_type %}<ausblick blick="{{ doc.custom_view_type or "" }}" />{% endif -%}
+                    {%- if doc.custom_distance_to_school %}<distanzen distanz_zu="HAUPTSCHULE">{{ doc.custom_distance_to_school or "" }}</distanzen>{% endif -%}
+                    {%- if doc.custom_distance_to_lake %}<distanzen_sport distanz_zu_sport="SEE">{{ doc.custom_distance_to_lake or "" }}</distanzen_sport>{% endif -%}
                 </infrastruktur>
                 -#}
 
                 <freitexte>
                     {%- if doc.custom_marketing_title -%}
-                    <objekttitel>{{ doc.custom_marketing_title }}</objekttitel>
+                    <objekttitel>{{ doc.custom_marketing_title or "" }}</objekttitel>
                     {%- endif -%}
                     {%- if doc.custom_location_short -%}
-                    <dreizeiler>{{ doc.custom_location_short }}</dreizeiler>
+                    <dreizeiler>{{ doc.custom_location_short or "" }}</dreizeiler>
                     {%- endif -%}
                     {%- if doc.custom_location -%}
-                    <lage>{{ doc.custom_location }}</lage>
+                    <lage>{{ doc.custom_location or "" }}</lage>
                     {%- endif -%}
                     {%- if doc.custom_equipment -%}
-                    <ausstatt_beschr>{{ doc.custom_equipment }}</ausstatt_beschr>
+                    <ausstatt_beschr>{{ doc.custom_equipment or "" }}</ausstatt_beschr>
                     {%- endif -%}
                     {%- if doc.custom_marketing_description -%}
-                    <objektbeschreibung>{{ doc.custom_marketing_description }}</objektbeschreibung>
+                    <objektbeschreibung>{{ doc.custom_marketing_description or "" }}</objektbeschreibung>
                     {%- endif -%}
                     {%- if doc.custom_additional_information -%}
-                    <sonstige_angaben>{{ doc.custom_additional_information }}</sonstige_angaben>
+                    <sonstige_angaben>{{ doc.custom_additional_information or "" }}</sonstige_angaben>
                     {%- endif -%}
                     <objekt_text lang="GER"/>
                 </freitexte>
@@ -282,7 +312,7 @@ OPENIMMO_JINJA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
                 {%- if doc.custom_image_gallery -%}
                 <anhaenge>
                     {# --- Check if any image is explicitly flagged as hero_image --- #}
-                    {%- set ns_hero = namespace(has_hero=false) -%}
+                    {%- set ns_hero = namespace(has_hero=false, hero_written=false) -%}
                     {%- for row in doc.custom_image_gallery -%}
                         {%- if row.is_hero_image -%}
                             {%- set ns_hero.has_hero = true -%}
@@ -292,11 +322,12 @@ OPENIMMO_JINJA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
                     {%- for row in doc.custom_image_gallery -%}
                         {%- set img_path = row.get("picture") -%}
                         {%- if img_path -%}
-                            {# --- If hero is found, use is_hero_image. Otherwise fallback to first image as hero --- #}
+                            {# --- If hero is found, use is_hero_image (guaranteeing only one TITELBILD). Otherwise fallback to first image as hero --- #}
                             {%- set is_hero = false -%}
                             {%- if ns_hero.has_hero -%}
-                                {%- if row.is_hero_image -%}
+                                {%- if row.is_hero_image and not ns_hero.hero_written -%}
                                     {%- set is_hero = true -%}
+                                    {%- set ns_hero.hero_written = true -%}
                                 {%- endif -%}
                             {%- else -%}
                                 {%- if loop.first -%}
@@ -316,14 +347,11 @@ OPENIMMO_JINJA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
                 {%- endif -%}
 
                 <verwaltung_objekt>
-                    {%- if doc.custom_marketing_status -%}
-                    <reserviert>{{ 'true' if doc.custom_marketing_status == 'RESERVIERT' else 'false' }}</reserviert>
+                    {%- if doc.custom_available_from -%}
+                    <verfuegbar_ab>{{ doc.custom_available_from or "" }}</verfuegbar_ab>
                     {%- endif -%}
                     {%- if doc.status -%}
                     <vermietet>{{ 'true' if doc.status == 'Rented' else 'false' }}</vermietet>
-                    {%- endif -%}
-                    {%- if doc.custom_available_from -%}
-                    <verfuegbar_ab>{{ doc.custom_available_from }}</verfuegbar_ab>
                     {%- endif -%}
                     {%- if doc.custom_pets_allowed is not none -%}
                     <haustiere>{{ 'true' if doc.custom_pets_allowed in [True, 'true', 1, '1'] else 'false' }}</haustiere>
@@ -334,14 +362,14 @@ OPENIMMO_JINJA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
                 </verwaltung_objekt>
 
                 <verwaltung_techn>
-                    <objektnr_intern>{{ doc.name }}</objektnr_intern>
-                    <objektnr_extern>{{ doc.name }}</objektnr_extern>
+                    <objektnr_intern>{{ (doc.name[2:] if (doc.name or "").startswith("E-") else (doc.name or "")) }}</objektnr_intern>
+                    <objektnr_extern>{{ (doc.name[2:] if (doc.name or "").startswith("E-") else (doc.name or "")) }}</objektnr_extern>
                     <aktion aktionart="{{ source.transfer_mode }}"/>
-                    <openimmo_obid>{{ doc.name }}</openimmo_obid>
-                    <stand_vom>{{ doc.modified }}</stand_vom>
                     {%- if doc.custom_available_from -%}
-                    <aktiv_von>{{ doc.custom_available_from }}</aktiv_von>
+                    <aktiv_von>{{ doc.custom_available_from or "" }}</aktiv_von>
                     {%- endif -%}
+                    <openimmo_obid>{{ (doc.name[2:] if (doc.name or "").startswith("E-") else (doc.name or "")) }}</openimmo_obid>
+                    <stand_vom>{{ doc.modified.strftime('%Y-%m-%d') }}</stand_vom>
                 </verwaltung_techn>
             </immobilie>
         {%- endfor -%}
