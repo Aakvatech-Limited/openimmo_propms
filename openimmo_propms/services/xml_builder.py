@@ -8,22 +8,39 @@ import re
 def ensure_xml_path(parent, path):
     """
     Create nested XML nodes for a dotted path and return the last node.
-    Supports attributes via @ notation and numeric array indices (e.g. 'bewertung.feld.0.name').
+    Supports attributes via @ notation and numeric array indices.
+    Examples:
+        'geo.land@iso_land'
+        'bewertung.feld.0.name'
+        'anhaenge.anhang.0@location'
     """
     current = parent
     parts = path.split(".")
     
+    saved_attr_name = None
     i = 0
     while i < len(parts):
         part = parts[i]
         attr_name = None
+        
+        # Pre-split @ to check for attributes on the current part
         if "@" in part:
             part, attr_name = part.split("@")
+            if i == len(parts) - 1:
+                saved_attr_name = attr_name
         
-        # Check if the next part is a numeric index
+        # Check if the next part is a numeric index (possibly with an attribute, e.g. 0@location)
         index = None
-        if i + 1 < len(parts) and parts[i+1].isdigit():
-            index = int(parts[i+1])
+        if i + 1 < len(parts):
+            next_part = parts[i+1]
+            next_attr_name = None
+            if "@" in next_part:
+                next_part, next_attr_name = next_part.split("@")
+            
+            if next_part.isdigit():
+                index = int(next_part)
+                if i + 1 == len(parts) - 1:
+                    saved_attr_name = next_attr_name
             
         if index is not None:
             # Find all children with the tag name
@@ -42,10 +59,7 @@ def ensure_xml_path(parent, path):
             current = child
             i += 1
             
-        if attr_name and i == len(parts):
-            return current, attr_name
-            
-    return current, None
+    return current, saved_attr_name
 
 
 def set_xml_value(parent, path, value):

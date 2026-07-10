@@ -81,6 +81,10 @@ jinja = {
 		"openimmo_propms.utils.jinja_methods.get_document",
 		"openimmo_propms.utils.jinja_methods.get_value",
 	],
+	"filters": [
+		"openimmo_propms.utils.jinja_methods.format_immowelt_date",
+		"openimmo_propms.utils.jinja_methods.format_decimal",
+	]
 }
 
 # Installation

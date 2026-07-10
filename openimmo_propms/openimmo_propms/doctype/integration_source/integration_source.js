@@ -39,12 +39,21 @@ frappe.ui.form.on("Integration Source", {
 					freeze_message: __("Rendering Jinja template..."),
 					callback: (r) => {
 						if (r.message) {
-							frappe.msgprint({
+							let d = new frappe.ui.Dialog({
 								title: __("Preview XML"),
-								indicator: "green",
-								message: `<pre style="max-height:500px;overflow:auto;font-size:12px;">${frappe.utils.escape_html(r.message)}</pre>`,
-								wide: true,
+								size: "extra-large",
+								fields: [
+									{
+										fieldname: "xml_preview",
+										fieldtype: "Code",
+										options: "XML",
+										label: "",
+										read_only: 1,
+										default: r.message,
+									}
+								]
 							});
+							d.show();
 						}
 					},
 				});
