@@ -337,7 +337,7 @@
   },
   {
    "depends_on": "eval:doc.operation_type=='Export'",
-   "description": "Optional JSON filters for export records. Example: {\"published\": 1} or [[\"status\", \"in\", [\"Published\", \"Active\"]]]",
+   "description": "Optional JSON filters. Supports Jinja variables: {{ today }}, {{ today_start }}, {{ today_end }}, {{ yesterday }}, {{ yesterday_start }}, {{ yesterday_end }}, and {{ last_sync_at }}. Example: [[\"modified\", \">=\", \"{{ yesterday_start }}\"], [\"modified\", \"<=\", \"{{ yesterday_end }}\"]]",
    "fieldname": "export_filters_json",
    "fieldtype": "Code",
    "label": "Export Filters (JSON)",

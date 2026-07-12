@@ -93,6 +93,10 @@ def execute_scheduled_sync():
     
     for source in sources:
         if _should_sync_now(source):
+            frappe.log_error(
+                message=f"Triggering scheduled {source.operation_type} for {source.name} (Frequency: {source.sync_frequency})",
+                title="Integration Scheduler Trigger"
+            )
             if source.operation_type == "Export":
                 frappe.enqueue(
                     "openimmo_propms.services.export_engine.run_export",
