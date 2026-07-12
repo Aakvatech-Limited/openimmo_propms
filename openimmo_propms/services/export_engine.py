@@ -24,105 +24,125 @@ _OPENIMMO_TEMPLATE_PATH = (
 
 def run_export(source_name, **kwargs):
     """Run a metadata-driven export without touching the import flow."""
-    source = frappe.get_doc("Integration Source", source_name)
-    _validate_export_source(source)
+    frappe.log_error(
+        message=f"Starting export execution for Integration Source: {source_name}",
+        title="Integration Export Start"
+    )
+    try:
+        source = frappe.get_doc("Integration Source", source_name)
+        _validate_export_source(source)
 
-    records = _get_records_for_export(source, kwargs)
-    if not records:
-        if frappe.flags.in_scheduler or frappe.flags.in_job:
-            source.db_set("last_sync_status", "Success (No modifications)")
-            source.db_set("last_sync_at", frappe.utils.now())
-            return {"status": "success", "record_count": 0, "message": "No properties found to export."}
-        else:
-            frappe.throw(_("No properties found matching the configured export filters."))
-    mapped_records = [build_property_data(source, record) for record in records]
-    
-    # Inject transfer_mode into each record for dynamic Aktion mapping
-    transfer_mode = source.transfer_mode
-    if not transfer_mode:
-        frappe.throw("Mandatory field 'Transfer Mode' is missing in Integration Source configuration.")
-    for record in mapped_records:
-        record["verwaltung_techn.aktion"] = transfer_mode
-        record["verwaltung_techn.aktion@aktionart"] = transfer_mode
-        if not record.get("verwaltung_techn.openimmo_obid"):
-            record["verwaltung_techn.openimmo_obid"] = record.get("objektnr_intern", "NO-OBID")
-    
-    anbieter_id = kwargs.get("anbieter_id") or source.anbieter_id
-    
-    # Check if we should use XSD-driven generation
-    if source.export_format == "OpenImmo" and not getattr(source, "use_jinja_template", 0):
-        anbieter_context = {
-            "anbieter_id": anbieter_id,
-            "firma": getattr(source, "provider_name", "") or "My Company",
-            "openimmo_anid": getattr(source, "openimmo_anid", ""),
-            "portal_name": source.portal_name,
-            "transfer_scope": source.transfer_scope,
-            "transfer_mode": source.transfer_mode
-        }
+        records = _get_records_for_export(source, kwargs)
+        if not records:
+            if frappe.flags.in_scheduler or frappe.flags.in_job:
+                source.db_set("last_sync_status", "Success (No modifications)")
+                source.db_set("last_sync_at", frappe.utils.now())
+                frappe.log_error(
+                    message=f"Export execution finished: No properties found/modified for {source_name}",
+                    title="Integration Export Complete"
+                )
+                return {"status": "success", "record_count": 0, "message": "No properties found to export."}
+            else:
+                frappe.throw(_("No properties found matching the configured export filters."))
+        mapped_records = [build_property_data(source, record) for record in records]
         
-        xml_content = generate_xsd_based_xml(
-            mapped_records,
-            anbieter_context
-        )
+        # Inject transfer_mode into each record for dynamic Aktion mapping
+        transfer_mode = source.transfer_mode
+        if not transfer_mode:
+            frappe.throw("Mandatory field 'Transfer Mode' is missing in Integration Source configuration.")
+        for record in mapped_records:
+            record["verwaltung_techn.aktion"] = transfer_mode
+            record["verwaltung_techn.aktion@aktionart"] = transfer_mode
+            if not record.get("verwaltung_techn.openimmo_obid"):
+                record["verwaltung_techn.openimmo_obid"] = record.get("objektnr_intern", "NO-OBID")
         
-        # Validation as final check
-        is_valid, error_msg = validate_xml_against_xsd(xml_content, "openimmo_127c.xsd")
-        if not is_valid:
-             frappe.throw(_("Generated XML is not compliant with XSD: {0}").format(error_msg))
-             
-        # For simplicity in the existing batch flow, we pack it into a 'documents' list structure
-        # (Though XSD builder currently returns the whole doc, we adapt it)
-        documents = [{
-            "filename": _build_batch_filename(source),
-            "xml_content": _normalize_xml_document(xml_content),
-            "record_count": len(records),
-        }]
-    else:
-        export_records = list(zip(records, mapped_records))
-        documents = _build_export_documents(source, export_records, kwargs)
+        anbieter_id = kwargs.get("anbieter_id") or source.anbieter_id
         
-        # Validate Jinja-rendered OpenImmo XML against XSD
-        if source.export_format == "OpenImmo" and getattr(source, "use_jinja_template", 0):
-            for document in documents:
-                is_valid, error_msg = validate_xml_against_xsd(document["xml_content"], "openimmo_127c.xsd")
-                if not is_valid:
-                    frappe.throw(_("Generated XML is not compliant with XSD: {0}").format(error_msg))
-
-    should_save = _should_save_file(source, kwargs.get("save_file"))
-    responses = []
-
-    for document in documents:
-        xml_hash = _build_xml_hash(document["xml_content"])
-        response = {
-            "status": "success",
-            "record_count": document["record_count"],
-            "filename": document["filename"],
-            "xml_hash": xml_hash,
-        }
-
-        if should_save:
-            file_doc = save_file(
-                document["filename"],
-                document["xml_content"],
-                "Integration Source",
-                source.name,
-                is_private=1,
+        # Check if we should use XSD-driven generation
+        if source.export_format == "OpenImmo" and not getattr(source, "use_jinja_template", 0):
+            anbieter_context = {
+                "anbieter_id": anbieter_id,
+                "firma": getattr(source, "provider_name", "") or "My Company",
+                "openimmo_anid": getattr(source, "openimmo_anid", ""),
+                "portal_name": source.portal_name,
+                "transfer_scope": source.transfer_scope,
+                "transfer_mode": source.transfer_mode
+            }
+            
+            xml_content = generate_xsd_based_xml(
+                mapped_records,
+                anbieter_context
             )
-            response["file_url"] = file_doc.file_url
+            
+            # Validation as final check
+            is_valid, error_msg = validate_xml_against_xsd(xml_content, "openimmo_127c.xsd")
+            if not is_valid:
+                 frappe.throw(_("Generated XML is not compliant with XSD: {0}").format(error_msg))
+                 
+            # For simplicity in the existing batch flow, we pack it into a 'documents' list structure
+            # (Though XSD builder currently returns the whole doc, we adapt it)
+            documents = [{
+                "filename": _build_batch_filename(source),
+                "xml_content": _normalize_xml_document(xml_content),
+                "record_count": len(records),
+            }]
         else:
-            response["xml"] = document["xml_content"]
+            export_records = list(zip(records, mapped_records))
+            documents = _build_export_documents(source, export_records, kwargs)
+            
+            # Validate Jinja-rendered OpenImmo XML against XSD
+            if source.export_format == "OpenImmo" and getattr(source, "use_jinja_template", 0):
+                for document in documents:
+                    is_valid, error_msg = validate_xml_against_xsd(document["xml_content"], "openimmo_127c.xsd")
+                    if not is_valid:
+                        frappe.throw(_("Generated XML is not compliant with XSD: {0}").format(error_msg))
 
-        delivery_result = _deliver_export(source, document["filename"], document["xml_content"], xml_hash)
-        if delivery_result:
-            response.update(delivery_result)
+        should_save = _should_save_file(source, kwargs.get("save_file"))
+        responses = []
 
-        if should_save:
-            job = _create_export_job(source, response)
-            response["job_name"] = job.name
+        for document in documents:
+            xml_hash = _build_xml_hash(document["xml_content"])
+            response = {
+                "status": "success",
+                "record_count": document["record_count"],
+                "filename": document["filename"],
+                "xml_hash": xml_hash,
+            }
 
-        responses.append(response)
+            if should_save:
+                file_doc = save_file(
+                    document["filename"],
+                    document["xml_content"],
+                    "Integration Source",
+                    source.name,
+                    is_private=1,
+                )
+                response["file_url"] = file_doc.file_url
+            else:
+                response["xml"] = document["xml_content"]
 
-    return _summarize_export_response(source, responses)
+            delivery_result = _deliver_export(source, document["filename"], document["xml_content"], xml_hash)
+            if delivery_result:
+                response.update(delivery_result)
+
+            if should_save:
+                job = _create_export_job(source, response)
+                response["job_name"] = job.name
+
+            responses.append(response)
+
+        summary = _summarize_export_response(source, responses)
+        frappe.log_error(
+            message=f"Export completed successfully for {source_name}. Summary: {frappe.as_json(summary)}",
+            title="Integration Export Success"
+        )
+        return summary
+    except Exception as e:
+        frappe.log_error(
+            message=f"Export failed for {source_name}:\n{frappe.get_traceback()}",
+            title="Integration Export Failure"
+        )
+        raise e
 
 
 def _validate_export_source(source):
