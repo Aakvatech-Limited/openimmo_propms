@@ -28,6 +28,13 @@ def run_export(source_name, **kwargs):
     _validate_export_source(source)
 
     records = _get_records_for_export(source, kwargs)
+    if not records:
+        if frappe.flags.in_scheduler or frappe.flags.in_job:
+            source.db_set("last_sync_status", "Success (No modifications)")
+            source.db_set("last_sync_at", frappe.utils.now())
+            return {"status": "success", "record_count": 0, "message": "No properties found to export."}
+        else:
+            frappe.throw(_("No properties found matching the configured export filters."))
     mapped_records = [build_property_data(source, record) for record in records]
     
     # Inject transfer_mode into each record for dynamic Aktion mapping
@@ -325,7 +332,24 @@ def _get_configured_export_filters(source):
     if not filters_json:
         return {}
 
-    parsed_filters = frappe.parse_json(filters_json)
+    # Render Jinja templates in the JSON string
+    from frappe.utils import nowdate, add_days, get_datetime_str
+    today_str = nowdate()
+    yesterday_str = add_days(today_str, -1)
+    
+    context = {
+        "last_sync_at": get_datetime_str(source.last_sync_at) if source.last_sync_at else "1970-01-01 00:00:00",
+        "today": today_str,
+        "today_start": f"{today_str} 00:00:00",
+        "today_end": f"{today_str} 23:59:59",
+        "yesterday": yesterday_str,
+        "yesterday_start": f"{yesterday_str} 00:00:00",
+        "yesterday_end": f"{yesterday_str} 23:59:59",
+    }
+    
+    rendered_json = frappe.render_template(filters_json, context)
+
+    parsed_filters = frappe.parse_json(rendered_json)
     if isinstance(parsed_filters, list):
         return _normalize_list_filters(parsed_filters)
     if isinstance(parsed_filters, dict):
