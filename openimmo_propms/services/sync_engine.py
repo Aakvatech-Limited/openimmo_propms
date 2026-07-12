@@ -137,16 +137,18 @@ def _should_sync_now(source):
     if not last_sync:
         return True
     
-    from frappe.utils import now_datetime, add_to_date
+    from frappe.utils import now_datetime, add_to_date, getdate
     current_time = now_datetime()
     
     if source.sync_frequency == "Hourly":
         next_sync = add_to_date(last_sync, hours=1)
+        return current_time >= next_sync
     elif source.sync_frequency == "Daily":
-        next_sync = add_to_date(last_sync, days=1)
+        # Check if the calendar date has changed since the last sync.
+        # Since the scheduler runs hourly, this will trigger on the first hourly run after midnight.
+        return getdate(current_time) > getdate(last_sync)
     elif source.sync_frequency == "Weekly":
         next_sync = add_to_date(last_sync, weeks=1)
+        return current_time >= next_sync
     else:
         return False
-    
-    return current_time >= next_sync
