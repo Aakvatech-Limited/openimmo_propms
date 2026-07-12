@@ -132,6 +132,12 @@ def run_export(source_name, **kwargs):
             responses.append(response)
 
         summary = _summarize_export_response(source, responses)
+        
+        # Update last sync time and status for all successful runs
+        source.db_set("last_sync_at", frappe.utils.now())
+        if source.source_type != "FTP" or not cint(source.ftp_transfer_enabled):
+            source.db_set("last_sync_status", "Export completed")
+
         frappe.log_error(
             message=f"Export completed successfully for {source_name}. Summary: {frappe.as_json(summary)}",
             title="Integration Export Success"
