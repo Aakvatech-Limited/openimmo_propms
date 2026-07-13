@@ -24,12 +24,15 @@ _OPENIMMO_TEMPLATE_PATH = (
 
 def run_export(source_name, **kwargs):
     """Run a metadata-driven export without touching the import flow."""
-    frappe.log_error(
-        message=f"Starting export execution for Integration Source: {source_name}",
-        title="Integration Export Start"
-    )
     try:
         source = frappe.get_doc("Integration Source", source_name)
+        freq = source.sync_frequency or "Manual"
+        
+        frappe.log_error(
+            message=f"Starting export execution for Integration Source: {source_name}",
+            title=f"[{freq}] XML Export Start"
+        )
+        
         _validate_export_source(source)
 
         records = _get_records_for_export(source, kwargs)
@@ -39,7 +42,7 @@ def run_export(source_name, **kwargs):
                 source.db_set("last_sync_at", frappe.utils.now())
                 frappe.log_error(
                     message=f"Export execution finished: No properties found/modified for {source_name}",
-                    title="Integration Export Complete"
+                    title=f"[{freq}] XML Export Complete"
                 )
                 return {"status": "success", "record_count": 0, "message": "No properties found to export."}
             else:
@@ -140,13 +143,18 @@ def run_export(source_name, **kwargs):
 
         frappe.log_error(
             message=f"Export completed successfully for {source_name}. Summary: {frappe.as_json(summary)}",
-            title="Integration Export Success"
+            title=f"[{freq}] XML Export Success"
         )
         return summary
     except Exception as e:
+        freq = "Export"
+        try:
+            freq = frappe.db.get_value("Integration Source", source_name, "sync_frequency") or "Manual"
+        except Exception:
+            pass
         frappe.log_error(
             message=f"Export failed for {source_name}:\n{frappe.get_traceback()}",
-            title="Integration Export Failure"
+            title=f"[{freq}] XML Export Failure"
         )
         raise e
 
