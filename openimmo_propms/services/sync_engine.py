@@ -97,29 +97,31 @@ def execute_scheduled_sync():
     )
     
     for source in sources:
+        freq = source.sync_frequency or "Manual"
+        op = source.operation_type or "Sync"
         if _should_sync_now(source):
             frappe.log_error(
                 message=f"Triggering scheduled {source.operation_type} for {source.name} (Frequency: {source.sync_frequency}, Last Sync At: {source.last_sync_at})",
-                title="Integration Scheduler Trigger"
+                title=f"[{freq}] XML {op} Scheduler Trigger"
             )
             if source.operation_type == "Export":
                 frappe.enqueue(
                     "openimmo_propms.services.export_engine.run_export",
                     source_name=source.name,
-                    queue="long",
-                    timeout=3000,
+                    queue="short",
+                    timeout=300,
                 )
             else:
                 frappe.enqueue(
                     "openimmo_propms.services.sync_engine.execute_sync",
                     source_name=source.name,
-                    queue="long",
-                    timeout=3000,
+                    queue="short",
+                    timeout=300,
                 )
         else:
             frappe.log_error(
                 message=f"Skipping scheduled {source.operation_type} for {source.name} (Frequency: {source.sync_frequency}, Last Sync At: {source.last_sync_at}). It is not time to sync yet.",
-                title="Integration Scheduler Skip"
+                title=f"[{freq}] XML {op} Scheduler Skip"
             )
 
 
@@ -145,6 +147,9 @@ def _should_sync_now(source):
     if not source.get('sync_frequency') or source.sync_frequency == "Manual":
         return False
     
+    if source.sync_frequency == "Hourly":
+        return True
+    
     source_doc = frappe.get_doc("Integration Source", source.name)
     last_sync = source_doc.last_sync_at
     
@@ -154,14 +159,7 @@ def _should_sync_now(source):
     from frappe.utils import now_datetime, add_to_date, getdate
     current_time = now_datetime()
     
-    if source.sync_frequency == "Hourly":
-        # Check if the calendar hour has changed since the last sync.
-        # This ensures manual runs in the middle of an hour do not delay the next scheduled hourly run.
-        from frappe.utils import get_datetime
-        current_hour_start = get_datetime(current_time).replace(minute=0, second=0, microsecond=0)
-        last_sync_hour_start = get_datetime(last_sync).replace(minute=0, second=0, microsecond=0)
-        return current_hour_start > last_sync_hour_start
-    elif source.sync_frequency == "Daily":
+    if source.sync_frequency == "Daily":
         # Check if the calendar date has changed since the last sync.
         # Since the scheduler runs hourly, this will trigger on the first hourly run after midnight.
         return getdate(current_time) > getdate(last_sync)
@@ -170,3 +168,4 @@ def _should_sync_now(source):
         return current_time >= next_sync
     else:
         return False
+

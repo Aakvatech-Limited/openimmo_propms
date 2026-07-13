@@ -137,8 +137,8 @@ class IntegrationSource(Document):
         frappe.enqueue(
             'openimmo_propms.services.sync_engine.execute_sync',
             source_name=self.name,
-            queue='long',
-            timeout=3000
+            queue='short',
+            timeout=300
         )
         
         frappe.msgprint(_("Sync job queued successfully"), alert=True, indicator='green')
