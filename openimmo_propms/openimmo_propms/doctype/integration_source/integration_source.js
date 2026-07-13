@@ -8,6 +8,58 @@ frappe.ui.form.on("Integration Source", {
 		toggle_credential_fields(frm);
 		update_ftp_intro(frm);
 
+		// Load Default Template button
+		if (frm.doc.use_jinja_template && frm.doc.operation_type === "Export") {
+			frm.add_custom_button(__("Load Default Template"), () => {
+				frappe.call({
+					method: "openimmo_propms.api.export.get_default_template",
+					args: { template_name: "OpenImmo 1.2.7" },
+					freeze: true,
+					freeze_message: __("Loading template..."),
+					callback: (r) => {
+						if (r.message) {
+							frm.set_value("xml_template", r.message);
+							frappe.show_alert({
+								message: __("Default template loaded: OpenImmo 1.2.7"),
+								indicator: "green",
+							});
+						}
+					},
+				});
+			}, __("Tools"));
+		}
+
+		// Preview Jinja XML button (same pattern as Notification/Auto Repeat preview)
+		if (frm.doc.use_jinja_template && frm.doc.xml_template && frm.doc.operation_type === "Export") {
+			frm.add_custom_button(__("Preview XML"), () => {
+				frappe.call({
+					method: "openimmo_propms.api.export.preview_jinja_xml",
+					args: { source_name: frm.doc.name },
+					freeze: true,
+					freeze_message: __("Rendering Jinja template..."),
+					callback: (r) => {
+						if (r.message) {
+							let d = new frappe.ui.Dialog({
+								title: __("Preview XML"),
+								size: "extra-large",
+								fields: [
+									{
+										fieldname: "xml_preview",
+										fieldtype: "Code",
+										options: "XML",
+										label: "",
+										read_only: 1,
+										default: r.message,
+									}
+								]
+							});
+							d.show();
+						}
+					},
+				});
+			}, __("Tools"));
+		}
+
 		if (frm.doc.source_type === "FTP") {
 			// 1. Connection Test Button
 			frm.add_custom_button(__("FTP Test Connection"), () => {
