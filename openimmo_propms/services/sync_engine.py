@@ -88,13 +88,18 @@ def execute_scheduled_sync():
             "sync_frequency": ["!=", "Manual"],
             "operation_type": ["in", ["Import", "Export"]],
         },
-        fields=["name", "sync_frequency", "operation_type"],
+        fields=["name", "sync_frequency", "operation_type", "last_sync_at"],
+    )
+    
+    frappe.log_error(
+        message=f"Scheduled sync cron active. Found {len(sources)} enabled sources to check.",
+        title="Integration Scheduler Cron Run"
     )
     
     for source in sources:
         if _should_sync_now(source):
             frappe.log_error(
-                message=f"Triggering scheduled {source.operation_type} for {source.name} (Frequency: {source.sync_frequency})",
+                message=f"Triggering scheduled {source.operation_type} for {source.name} (Frequency: {source.sync_frequency}, Last Sync At: {source.last_sync_at})",
                 title="Integration Scheduler Trigger"
             )
             if source.operation_type == "Export":
@@ -111,6 +116,11 @@ def execute_scheduled_sync():
                     queue="long",
                     timeout=3000,
                 )
+        else:
+            frappe.log_error(
+                message=f"Skipping scheduled {source.operation_type} for {source.name} (Frequency: {source.sync_frequency}, Last Sync At: {source.last_sync_at}). It is not time to sync yet.",
+                title="Integration Scheduler Skip"
+            )
 
 
 def _get_processor(source):
