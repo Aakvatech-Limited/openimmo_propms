@@ -8,31 +8,58 @@ import re
 def ensure_xml_path(parent, path):
     """
     Create nested XML nodes for a dotted path and return the last node.
-    Supports attributes via @ notation.
-    Example path: 'geo.land@iso_land'
+    Supports attributes via @ notation and numeric array indices.
+    Examples:
+        'geo.land@iso_land'
+        'bewertung.feld.0.name'
+        'anhaenge.anhang.0@location'
     """
     current = parent
     parts = path.split(".")
     
-    for i, part in enumerate(parts):
-        # Check if this part has an attribute
+    saved_attr_name = None
+    i = 0
+    while i < len(parts):
+        part = parts[i]
         attr_name = None
+        
+        # Pre-split @ to check for attributes on the current part
         if "@" in part:
             part, attr_name = part.split("@")
+            if i == len(parts) - 1:
+                saved_attr_name = attr_name
         
-        # Find or create child
-        child = current.find(part)
-        if child is None:
-            child = etree.SubElement(current, part)
-        
-        current = child
-        
-        # If there's an attribute but more parts follow, it's a structural error in path
-        # but we handle it by just continuing. Usually @ is at the very end.
-        if attr_name and i == len(parts) - 1:
-            return current, attr_name
+        # Check if the next part is a numeric index (possibly with an attribute, e.g. 0@location)
+        index = None
+        if i + 1 < len(parts):
+            next_part = parts[i+1]
+            next_attr_name = None
+            if "@" in next_part:
+                next_part, next_attr_name = next_part.split("@")
             
-    return current, None
+            if next_part.isdigit():
+                index = int(next_part)
+                if i + 1 == len(parts) - 1:
+                    saved_attr_name = next_attr_name
+            
+        if index is not None:
+            # Find all children with the tag name
+            children = current.findall(part)
+            # Ensure we have enough children to satisfy the index
+            while len(children) <= index:
+                new_child = etree.SubElement(current, part)
+                children.append(new_child)
+            child = children[index]
+            current = child
+            i += 2  # Skip the index part
+        else:
+            child = current.find(part)
+            if child is None:
+                child = etree.SubElement(current, part)
+            current = child
+            i += 1
+            
+    return current, saved_attr_name
 
 
 def set_xml_value(parent, path, value):

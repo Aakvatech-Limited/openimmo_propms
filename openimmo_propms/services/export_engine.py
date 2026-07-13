@@ -24,91 +24,139 @@ _OPENIMMO_TEMPLATE_PATH = (
 
 def run_export(source_name, **kwargs):
     """Run a metadata-driven export without touching the import flow."""
-    source = frappe.get_doc("Integration Source", source_name)
-    _validate_export_source(source)
-
-    records = _get_records_for_export(source, kwargs)
-    mapped_records = [build_property_data(source, record) for record in records]
-    
-    # Inject transfer_mode into each record for dynamic Aktion mapping
-    transfer_mode = source.transfer_mode
-    if not transfer_mode:
-        frappe.throw("Mandatory field 'Transfer Mode' is missing in Integration Source configuration.")
-    for record in mapped_records:
-        record["verwaltung_techn.aktion"] = transfer_mode
-        record["verwaltung_techn.aktion@aktionart"] = transfer_mode
-        if not record.get("verwaltung_techn.openimmo_obid"):
-            record["verwaltung_techn.openimmo_obid"] = record.get("objektnr_intern", "NO-OBID")
-    
-    anbieter_id = kwargs.get("anbieter_id") or source.anbieter_id
-    
-    # Check if we should use XSD-driven generation
-    if source.export_format == "OpenImmo":
-        anbieter_context = {
-            "anbieter_id": anbieter_id,
-            "firma": getattr(source, "provider_name", "") or "My Company",
-            "openimmo_anid": getattr(source, "openimmo_anid", ""),
-            "portal_name": source.portal_name,
-            "transfer_scope": source.transfer_scope,
-            "transfer_mode": source.transfer_mode
-        }
+    try:
+        source = frappe.get_doc("Integration Source", source_name)
+        freq = source.sync_frequency or "Manual"
         
-        xml_content = generate_xsd_based_xml(
-            mapped_records,
-            anbieter_context
+        frappe.log_error(
+            message=f"Starting export execution for Integration Source: {source_name}",
+            title=f"[{freq}] XML Export Start"
         )
         
-        # Validation as final check
-        is_valid, error_msg = validate_xml_against_xsd(xml_content, "openimmo_127c.xsd")
-        if not is_valid:
-             frappe.throw(_("Generated XML is not compliant with XSD: {0}").format(error_msg))
-             
-        # For simplicity in the existing batch flow, we pack it into a 'documents' list structure
-        # (Though XSD builder currently returns the whole doc, we adapt it)
-        documents = [{
-            "filename": _build_batch_filename(source),
-            "xml_content": _normalize_xml_document(xml_content),
-            "record_count": len(records),
-        }]
-    else:
-        export_records = list(zip(records, mapped_records))
-        documents = _build_export_documents(source, export_records, kwargs)
+        _validate_export_source(source)
 
-    should_save = _should_save_file(source, kwargs.get("save_file"))
-    responses = []
-
-    for document in documents:
-        xml_hash = _build_xml_hash(document["xml_content"])
-        response = {
-            "status": "success",
-            "record_count": document["record_count"],
-            "filename": document["filename"],
-            "xml_hash": xml_hash,
-        }
-
-        if should_save:
-            file_doc = save_file(
-                document["filename"],
-                document["xml_content"],
-                "Integration Source",
-                source.name,
-                is_private=1,
+        records = _get_records_for_export(source, kwargs)
+        if not records:
+            if frappe.flags.in_scheduler or frappe.flags.in_job:
+                source.db_set("last_sync_status", "Success (No modifications)")
+                source.db_set("last_sync_at", frappe.utils.now())
+                frappe.log_error(
+                    message=f"Export execution finished: No properties found/modified for {source_name}",
+                    title=f"[{freq}] XML Export Complete"
+                )
+                return {"status": "success", "record_count": 0, "message": "No properties found to export."}
+            else:
+                frappe.throw(_("No properties found matching the configured export filters."))
+        mapped_records = [build_property_data(source, record) for record in records]
+        
+        # Inject transfer_mode into each record for dynamic Aktion mapping
+        transfer_mode = source.transfer_mode
+        if not transfer_mode:
+            frappe.throw("Mandatory field 'Transfer Mode' is missing in Integration Source configuration.")
+        for record in mapped_records:
+            record["verwaltung_techn.aktion"] = transfer_mode
+            record["verwaltung_techn.aktion@aktionart"] = transfer_mode
+            if not record.get("verwaltung_techn.openimmo_obid"):
+                record["verwaltung_techn.openimmo_obid"] = record.get("objektnr_intern", "NO-OBID")
+        
+        anbieter_id = kwargs.get("anbieter_id") or source.anbieter_id
+        
+        # Check if we should use XSD-driven generation
+        if source.export_format == "OpenImmo" and not getattr(source, "use_jinja_template", 0):
+            anbieter_context = {
+                "anbieter_id": anbieter_id,
+                "firma": getattr(source, "provider_name", "") or "My Company",
+                "openimmo_anid": getattr(source, "openimmo_anid", ""),
+                "portal_name": source.portal_name,
+                "transfer_scope": source.transfer_scope,
+                "transfer_mode": source.transfer_mode
+            }
+            
+            xml_content = generate_xsd_based_xml(
+                mapped_records,
+                anbieter_context
             )
-            response["file_url"] = file_doc.file_url
+            
+            # Validation as final check
+            is_valid, error_msg = validate_xml_against_xsd(xml_content, "openimmo_127c.xsd")
+            if not is_valid:
+                 frappe.throw(_("Generated XML is not compliant with XSD: {0}").format(error_msg))
+                 
+            # For simplicity in the existing batch flow, we pack it into a 'documents' list structure
+            # (Though XSD builder currently returns the whole doc, we adapt it)
+            documents = [{
+                "filename": _build_batch_filename(source),
+                "xml_content": _normalize_xml_document(xml_content),
+                "record_count": len(records),
+            }]
         else:
-            response["xml"] = document["xml_content"]
+            export_records = list(zip(records, mapped_records))
+            documents = _build_export_documents(source, export_records, kwargs)
+            
+            # Validate Jinja-rendered OpenImmo XML against XSD
+            if source.export_format == "OpenImmo" and getattr(source, "use_jinja_template", 0):
+                for document in documents:
+                    is_valid, error_msg = validate_xml_against_xsd(document["xml_content"], "openimmo_127c.xsd")
+                    if not is_valid:
+                        frappe.throw(_("Generated XML is not compliant with XSD: {0}").format(error_msg))
 
-        delivery_result = _deliver_export(source, document["filename"], document["xml_content"], xml_hash)
-        if delivery_result:
-            response.update(delivery_result)
+        should_save = _should_save_file(source, kwargs.get("save_file"))
+        responses = []
 
-        if should_save:
-            job = _create_export_job(source, response)
-            response["job_name"] = job.name
+        for document in documents:
+            xml_hash = _build_xml_hash(document["xml_content"])
+            response = {
+                "status": "success",
+                "record_count": document["record_count"],
+                "filename": document["filename"],
+                "xml_hash": xml_hash,
+            }
 
-        responses.append(response)
+            if should_save:
+                file_doc = save_file(
+                    document["filename"],
+                    document["xml_content"],
+                    "Integration Source",
+                    source.name,
+                    is_private=1,
+                )
+                response["file_url"] = file_doc.file_url
+            else:
+                response["xml"] = document["xml_content"]
 
-    return _summarize_export_response(source, responses)
+            delivery_result = _deliver_export(source, document["filename"], document["xml_content"], xml_hash)
+            if delivery_result:
+                response.update(delivery_result)
+
+            if should_save:
+                job = _create_export_job(source, response)
+                response["job_name"] = job.name
+
+            responses.append(response)
+
+        summary = _summarize_export_response(source, responses)
+        
+        # Update last sync time and status for all successful runs
+        source.db_set("last_sync_at", frappe.utils.now())
+        if source.source_type != "FTP" or not cint(source.ftp_transfer_enabled):
+            source.db_set("last_sync_status", "Export completed")
+
+        frappe.log_error(
+            message=f"Export completed successfully for {source_name}. Summary: {frappe.as_json(summary)}",
+            title=f"[{freq}] XML Export Success"
+        )
+        return summary
+    except Exception as e:
+        freq = "Export"
+        try:
+            freq = frappe.db.get_value("Integration Source", source_name, "sync_frequency") or "Manual"
+        except Exception:
+            pass
+        frappe.log_error(
+            message=f"Export failed for {source_name}:\n{frappe.get_traceback()}",
+            title=f"[{freq}] XML Export Failure"
+        )
+        raise e
 
 
 def _validate_export_source(source):
@@ -118,13 +166,13 @@ def _validate_export_source(source):
     if source.export_format not in ("OpenImmo", "Immowelt"):
         frappe.throw(_("Only OpenImmo and Immowelt export are supported in this version"))
 
-    if not source.field_mappings:
+    if not source.field_mappings and not getattr(source, "use_jinja_template", 0):
         frappe.throw(_("Please configure at least one field mapping"))
 
     if not source.target_doctype:
         frappe.throw(_("Target DocType is required for export"))
 
-    if source.export_format == "OpenImmo" and source.xml_template and "{{record_blocks}}" not in source.xml_template:
+    if source.export_format == "OpenImmo" and not getattr(source, "use_jinja_template", 0) and source.xml_template and "{{record_blocks}}" not in source.xml_template:
         frappe.throw(_("XML Template must include the {{record_blocks}} placeholder"))
 
 
@@ -160,6 +208,10 @@ def _build_export_documents(source, export_records, params):
 
 def _build_xml_content(source, export_records, params):
     anbieter_id = params.get("anbieter_id") or source.anbieter_id
+
+    # Jinja template path - takes precedence when enabled (Notification-style rendering)
+    if getattr(source, "use_jinja_template", 0) and source.xml_template:
+        return _build_jinja_xml(source, export_records, params)
 
     if source.export_format == "Immowelt":
         records = [record for record, mapped_record in export_records]
@@ -204,6 +256,61 @@ def _build_xml_content(source, export_records, params):
             transfer_mode=source.transfer_mode,
         )
     )
+
+
+def _build_jinja_xml(source, export_records, params):
+    """Render XML using Jinja template (same pattern as Notification DocType).
+
+    Uses frappe.render_template() which is already available globally.
+    Template context provides: doc, mapped, source, frappe.
+
+    For batch mode: template receives all_records list and loops internally.
+    For single mode: template receives doc (single record).
+    """
+    if source.record_packaging == "Separate XML per Record":
+        # Each record rendered separately - template gets single doc
+        parts = []
+        for record, mapped_record in export_records:
+            _validate_single_hero_image(record)
+            context = {
+                "doc": record,
+                "mapped": mapped_record,
+                "source": source,
+                "frappe": frappe,
+            }
+            parts.append(frappe.render_template(source.xml_template, context))
+        return "\n".join(parts)
+
+    # Batch mode - template gets all_records list for looping
+    all_records = []
+    for record, mapped_record in export_records:
+        _validate_single_hero_image(record)
+        all_records.append({"doc": record, "mapped": mapped_record})
+
+    context = {
+        "all_records": all_records,
+        "source": source,
+        "frappe": frappe,
+    }
+    return _normalize_xml_document(frappe.render_template(source.xml_template, context))
+
+
+def _validate_single_hero_image(record):
+    """Server-side validation: max 1 is_hero_image per property."""
+    gallery = record.get("custom_image_gallery") or []
+    if not isinstance(gallery, list):
+        return
+
+    hero_count = sum(
+        1 for img in gallery
+        if (img.get("is_hero_image") if isinstance(img, dict) else getattr(img, "is_hero_image", 0)) == 1
+    )
+    if hero_count > 1:
+        frappe.throw(
+            _("Property {0}: Only 1 hero image allowed, found {1} with is_hero_image=1").format(
+                record.get("name", "Unknown"), hero_count
+            )
+        )
 
 
 def _normalize_xml_document(xml_content):
@@ -259,7 +366,24 @@ def _get_configured_export_filters(source):
     if not filters_json:
         return {}
 
-    parsed_filters = frappe.parse_json(filters_json)
+    # Render Jinja templates in the JSON string
+    from frappe.utils import nowdate, add_days, get_datetime_str
+    today_str = nowdate()
+    yesterday_str = add_days(today_str, -1)
+    
+    context = {
+        "last_sync_at": get_datetime_str(source.last_sync_at) if source.last_sync_at else "1970-01-01 00:00:00",
+        "today": today_str,
+        "today_start": f"{today_str} 00:00:00",
+        "today_end": f"{today_str} 23:59:59",
+        "yesterday": yesterday_str,
+        "yesterday_start": f"{yesterday_str} 00:00:00",
+        "yesterday_end": f"{yesterday_str} 23:59:59",
+    }
+    
+    rendered_json = frappe.render_template(filters_json, context)
+
+    parsed_filters = frappe.parse_json(rendered_json)
     if isinstance(parsed_filters, list):
         return _normalize_list_filters(parsed_filters)
     if isinstance(parsed_filters, dict):
@@ -313,7 +437,7 @@ def _build_openimmo_template_document(source, export_records, anbieter_id):
     from lxml import etree
     from frappe.utils import now_datetime
 
-    root = etree.fromstring(_OPENIMMO_TEMPLATE_PATH.read_text(encoding="utf-8"))
+    root = etree.fromstring(_OPENIMMO_TEMPLATE_PATH.read_bytes())
     
     # 1. Fill <uebertragung>
     uebertragung = root.find("uebertragung")
