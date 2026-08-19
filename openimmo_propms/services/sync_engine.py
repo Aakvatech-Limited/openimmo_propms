@@ -118,11 +118,6 @@ def execute_scheduled_sync():
                     queue="short",
                     timeout=300,
                 )
-        else:
-            frappe.log_error(
-                message=f"Skipping scheduled {source.operation_type} for {source.name} (Frequency: {source.sync_frequency}, Last Sync At: {source.last_sync_at}). It is not time to sync yet.",
-                title=f"[{freq}] XML {op} Scheduler Skip"
-            )
 
 
 def _get_processor(source):

@@ -37,7 +37,7 @@ def run_export(source_name, **kwargs):
 
         records = _get_records_for_export(source, kwargs)
         if not records:
-            if frappe.flags.in_scheduler or frappe.flags.in_job:
+            if frappe.job:
                 source.db_set("last_sync_status", "Success (No modifications)")
                 source.db_set("last_sync_at", frappe.utils.now())
                 frappe.log_error(
