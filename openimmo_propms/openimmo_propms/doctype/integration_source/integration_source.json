@@ -140,7 +140,7 @@
    "fieldname": "sync_frequency",
    "fieldtype": "Select",
    "label": "Background Sync Frequency",
-   "options": "Manual\nHourly\nDaily\nWeekly"
+   "options": "Manual\nDaily\nWeekly"
   },
   {
    "depends_on": "eval:doc.operation_type=='Export'",
