@@ -153,7 +153,7 @@ jinja = {
 # 	}
 # }
 scheduler_events = {
-    "hourly": [
+    "daily": [
         "openimmo_propms.services.sync_engine.execute_scheduled_sync"
     ]
 }
