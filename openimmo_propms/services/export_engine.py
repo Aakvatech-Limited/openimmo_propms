@@ -28,22 +28,32 @@ def run_export(source_name, **kwargs):
         source = frappe.get_doc("Integration Source", source_name)
         freq = source.sync_frequency or "Manual"
         
-        frappe.log_error(
-            message=f"Starting export execution for Integration Source: {source_name}",
-            title=f"[{freq}] XML Export Start"
-        )
-        
         _validate_export_source(source)
 
         records = _get_records_for_export(source, kwargs)
+        
+        valid_records = []
+        blocked_summary = []
+        for record in records:
+            is_valid, reasons = _validate_quality_gate(source, record)
+            if is_valid:
+                valid_records.append(record)
+            else:
+                rec_id = record.get("name") or record.get("title") or "Property"
+                reasons_str = ", ".join(reasons) if reasons else "Failed Quality Gate"
+                blocked_summary.append(f"- {rec_id}: {reasons_str}")
+
+        if blocked_summary:
+            frappe.log_error(
+                message=f"Export execution for {source_name}: {len(blocked_summary)} properties blocked by Quality Gate:\n" + "\n".join(blocked_summary),
+                title=f"[{freq}] Quality Gate Summary ({len(blocked_summary)} Blocked)"
+            )
+
+        records = valid_records
         if not records:
             if frappe.job:
                 source.db_set("last_sync_status", "Success (No modifications)")
                 source.db_set("last_sync_at", frappe.utils.now())
-                frappe.log_error(
-                    message=f"Export execution finished: No properties found/modified for {source_name}",
-                    title=f"[{freq}] XML Export Complete"
-                )
                 return {"status": "success", "record_count": 0, "message": "No properties found to export."}
             else:
                 frappe.throw(_("No properties found matching the configured export filters."))
@@ -141,21 +151,9 @@ def run_export(source_name, **kwargs):
         if source.source_type != "FTP" or not cint(source.ftp_transfer_enabled):
             source.db_set("last_sync_status", "Export completed")
 
-        frappe.log_error(
-            message=f"Export completed successfully for {source_name}. Summary: {frappe.as_json(summary)}",
-            title=f"[{freq}] XML Export Success"
-        )
         return summary
     except Exception as e:
-        freq = "Export"
-        try:
-            freq = frappe.db.get_value("Integration Source", source_name, "sync_frequency") or "Manual"
-        except Exception:
-            pass
-        frappe.log_error(
-            message=f"Export failed for {source_name}:\n{frappe.get_traceback()}",
-            title=f"[{freq}] XML Export Failure"
-        )
+        frappe.logger("openimmo_export").error(f"Export failed for {source_name}: {str(e)}")
         raise e
 
 
@@ -1025,3 +1023,67 @@ def _connect_ftp(source):
         ftp.login(user, password)
         ftp.set_pasv(True)
         return ftp
+
+
+def _validate_quality_gate(source, record):
+    """
+    Validates Property record against Quality Gate script or default Package 2 rules.
+    Returns tuple (is_valid, reasons_list).
+    """
+    reasons = []
+
+    script = (source.get("quality_gate_script") or "").strip()
+    if not script:
+        script = (frappe.db.get_value("Integration Source", source.name, "quality_gate_script") or "").strip()
+
+    # 1. Evaluate custom Quality Gate script if configured
+    if script:
+        try:
+            from frappe.utils.safe_exec import safe_exec
+
+            exec_context = {
+                "doc": record,
+                "is_valid": True,
+                "reasons": reasons,
+                "getdate": frappe.utils.getdate,
+                "nowdate": frappe.utils.nowdate,
+                "flt": frappe.utils.flt,
+                "cint": frappe.utils.cint,
+                "frappe": frappe,
+            }
+            safe_exec(script, _globals=None, _locals=exec_context)
+            is_valid = bool(exec_context.get("is_valid", True))
+            if not is_valid and not reasons:
+                reasons.append("Quality Gate Failed")
+            return is_valid, reasons
+        except Exception as exc:
+            frappe.logger("openimmo_export").error(f"Quality Gate script execution error: {str(exc)}")
+
+    # 2. Fallback Default Package 2 Quality Criteria
+    title = record.get("title") or record.get("property_title") or record.get("name")
+    description = record.get("description") or record.get("objektbeschreibung")
+    cold_rent = frappe.utils.flt(
+        record.get("cold_rent") or record.get("custom_cold_rent") or record.get("kaltmiete")
+    )
+    available_from = (
+        record.get("custom_available_from")
+        or record.get("available_from")
+        or record.get("custom_available_date")
+        or record.get("verfuegbar_ab")
+    )
+
+    if not title or not str(title).strip():
+        reasons.append("Missing Title")
+
+    if not description or not str(description).strip():
+        reasons.append("Missing Description")
+
+    if cold_rent <= 0:
+        reasons.append("Cold Rent is 0")
+
+    if available_from and frappe.utils.getdate(available_from) < frappe.utils.getdate(frappe.utils.nowdate()):
+        reasons.append("Availability date is in the past")
+
+    is_valid = len(reasons) == 0
+    return is_valid, reasons
+
