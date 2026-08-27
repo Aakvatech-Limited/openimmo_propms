@@ -47,6 +47,7 @@
   "section_break_xml_template",
   "xml_template",
   "export_filters_json",
+  "quality_gate_script",
   "section_break_creds",
   "email_account",
   "email_folder",
@@ -140,7 +141,7 @@
    "fieldname": "sync_frequency",
    "fieldtype": "Select",
    "label": "Background Sync Frequency",
-   "options": "Manual\nHourly\nDaily\nWeekly"
+   "options": "Manual\nDaily\nWeekly"
   },
   {
    "depends_on": "eval:doc.operation_type=='Export'",
@@ -342,6 +343,14 @@
    "fieldtype": "Code",
    "label": "Export Filters (JSON)",
    "options": "JSON"
+  },
+  {
+   "depends_on": "eval:doc.operation_type=='Export'",
+   "description": "Python expression/script to validate properties before export. Set is_valid = False to block export.",
+   "fieldname": "quality_gate_script",
+   "fieldtype": "Code",
+   "label": "Quality Gate Script (Python)",
+   "options": "Python"
   },
   {
    "depends_on": "eval:(doc.operation_type=='Import' && doc.source_type!='Manual Upload') || doc.source_type=='FTP'",

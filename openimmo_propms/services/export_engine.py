@@ -16,6 +16,10 @@ from openimmo_propms.services.xml_builder import (
 )
 from openimmo_propms.services.xsd_builder import generate_xsd_based_xml
 from openimmo_propms.services.validator import validate_xml_against_xsd
+from openimmo_propms.services.quality_gate import (
+    validate_quality_gate,
+    evaluate_quality_gate_for_export,
+)
 
 _OPENIMMO_TEMPLATE_PATH = (
     Path(__file__).resolve().parents[1] / "templates" / "xml" / "openimmo-export.xml"
@@ -28,22 +32,14 @@ def run_export(source_name, **kwargs):
         source = frappe.get_doc("Integration Source", source_name)
         freq = source.sync_frequency or "Manual"
         
-        frappe.log_error(
-            message=f"Starting export execution for Integration Source: {source_name}",
-            title=f"[{freq}] XML Export Start"
-        )
-        
         _validate_export_source(source)
 
         records = _get_records_for_export(source, kwargs)
+        records = evaluate_quality_gate_for_export(source, records)
         if not records:
-            if frappe.flags.in_scheduler or frappe.flags.in_job:
+            if frappe.job:
                 source.db_set("last_sync_status", "Success (No modifications)")
                 source.db_set("last_sync_at", frappe.utils.now())
-                frappe.log_error(
-                    message=f"Export execution finished: No properties found/modified for {source_name}",
-                    title=f"[{freq}] XML Export Complete"
-                )
                 return {"status": "success", "record_count": 0, "message": "No properties found to export."}
             else:
                 frappe.throw(_("No properties found matching the configured export filters."))
@@ -141,21 +137,9 @@ def run_export(source_name, **kwargs):
         if source.source_type != "FTP" or not cint(source.ftp_transfer_enabled):
             source.db_set("last_sync_status", "Export completed")
 
-        frappe.log_error(
-            message=f"Export completed successfully for {source_name}. Summary: {frappe.as_json(summary)}",
-            title=f"[{freq}] XML Export Success"
-        )
         return summary
     except Exception as e:
-        freq = "Export"
-        try:
-            freq = frappe.db.get_value("Integration Source", source_name, "sync_frequency") or "Manual"
-        except Exception:
-            pass
-        frappe.log_error(
-            message=f"Export failed for {source_name}:\n{frappe.get_traceback()}",
-            title=f"[{freq}] XML Export Failure"
-        )
+        frappe.logger("openimmo_export").error(f"Export failed for {source_name}: {str(e)}")
         raise e
 
 
@@ -1025,3 +1009,7 @@ def _connect_ftp(source):
         ftp.login(user, password)
         ftp.set_pasv(True)
         return ftp
+
+
+_validate_quality_gate = validate_quality_gate
+
