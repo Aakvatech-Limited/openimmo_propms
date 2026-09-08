@@ -35,12 +35,19 @@ def run_export(source_name, **kwargs):
         _validate_export_source(source)
 
         records = _get_records_for_export(source, kwargs)
+        total_records = len(records)
         records = evaluate_quality_gate_for_export(source, records)
+        skipped_records = total_records - len(records)
         if not records:
             if frappe.job:
                 source.db_set("last_sync_status", "Success (No modifications)")
                 source.db_set("last_sync_at", frappe.utils.now())
-                return {"status": "success", "record_count": 0, "message": "No properties found to export."}
+                return {
+                    "status": "success",
+                    "record_count": 0,
+                    "skipped_records": skipped_records,
+                    "message": "No properties found to export.",
+                }
             else:
                 frappe.throw(_("No properties found matching the configured export filters."))
         mapped_records = [build_property_data(source, record) for record in records]
@@ -101,9 +108,12 @@ def run_export(source_name, **kwargs):
 
         for document in documents:
             xml_hash = _build_xml_hash(document["xml_content"])
+            skipped_for_job = skipped_records if not responses else 0
             response = {
                 "status": "success",
                 "record_count": document["record_count"],
+                "total_records": document["record_count"] + skipped_for_job,
+                "skipped_records": skipped_for_job,
                 "filename": document["filename"],
                 "xml_hash": xml_hash,
             }
@@ -865,6 +875,10 @@ def _should_save_file(source, save_file):
 
 
 def _create_export_job(source, response):
+    successful_records = response.get("record_count", 0)
+    skipped_records = response.get("skipped_records", 0)
+    total_records = response.get("total_records", successful_records + skipped_records)
+
     job = frappe.get_doc(
         {
             "doctype": "Integration Job",
@@ -878,10 +892,10 @@ def _create_export_job(source, response):
             "delivery_target": response.get("delivery_target"),
             "received_at": frappe.utils.now(),
             "processed_at": frappe.utils.now(),
-            "total_records": response.get("record_count", 0),
-            "successful_records": response.get("record_count", 0),
+            "total_records": total_records,
+            "successful_records": successful_records,
             "failed_records": 0,
-            "skipped_records": 0,
+            "skipped_records": skipped_records,
             "log_message": _build_export_log_message(response),
         }
     )
@@ -893,9 +907,10 @@ def _build_export_log_message(response):
     delivery_status = response.get("delivery_status", "generated")
     delivery_channel = response.get("delivery_channel", "Manual")
     return _(
-        "Export completed. Records: {0}, Delivery: {1}, Channel: {2}"
+        "Export completed. Records: {0}, Skipped: {1}, Delivery: {2}, Channel: {3}"
     ).format(
         response.get("record_count", 0),
+        response.get("skipped_records", 0),
         delivery_status,
         delivery_channel,
     )
@@ -908,6 +923,7 @@ def _summarize_export_response(source, responses):
     return {
         "status": "success",
         "record_count": sum(response.get("record_count", 0) for response in responses),
+        "skipped_records": sum(response.get("skipped_records", 0) for response in responses),
         "file_count": len(responses),
         "delivery_channel": responses[0].get("delivery_channel") if responses else source.source_type,
         "delivery_status": responses[0].get("delivery_status") if responses else "skipped",
@@ -1012,4 +1028,3 @@ def _connect_ftp(source):
 
 
 _validate_quality_gate = validate_quality_gate
-
