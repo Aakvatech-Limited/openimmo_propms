@@ -878,6 +878,8 @@ def _create_export_job(source, response):
     successful_records = response.get("record_count", 0)
     skipped_records = response.get("skipped_records", 0)
     total_records = response.get("total_records", successful_records + skipped_records)
+    details_by_source = getattr(frappe.local, "openimmo_quality_gate_details", None) or {}
+    processing_details = details_by_source.get(source.name, []) if skipped_records else []
 
     job = frappe.get_doc(
         {
@@ -897,6 +899,7 @@ def _create_export_job(source, response):
             "failed_records": 0,
             "skipped_records": skipped_records,
             "log_message": _build_export_log_message(response),
+            "processing_details": processing_details,
         }
     )
     job.insert(ignore_permissions=True)
