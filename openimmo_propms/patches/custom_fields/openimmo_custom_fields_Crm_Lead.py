@@ -9,12 +9,12 @@ def execute():
 	"""
 	Add custom fields for OpenImmo XML Import to Lead.
 	"""
-	# Identify the correct Lead DocType name (Lead vs CRM Lead)
-	doctype = "CRM Lead"
-	if not frappe.db.exists("DocType", doctype) and frappe.db.exists("DocType", "CRM Lead"):
-		doctype = "CRM Lead"
-
-	if not frappe.db.exists("DocType", doctype):
+	# The CRM app ships "CRM Lead"; a plain ERPNext site only has "Lead".
+	doctype = next(
+		(name for name in ("CRM Lead", "Lead") if frappe.db.exists("DocType", name)),
+		None,
+	)
+	if not doctype:
 		return
 
 	fields = {
@@ -23,7 +23,7 @@ def execute():
 				"fieldname": "openimmo_tab",
 				"fieldtype": "Tab Break",
 				"label": "OpenImmo",
-				"insert_after": "facebook_form_id",
+				"insert_after": _last_fieldname(doctype),
 			},
 			{
 				"fieldname": "openimmo_inquiry_section",
@@ -85,3 +85,9 @@ def execute():
 	}
 
 	create_custom_fields(fields, update=True)
+
+
+def _last_fieldname(doctype):
+	"""Anchor the OpenImmo tab after the doctype's final field."""
+	fieldnames = frappe.get_meta(doctype).get_valid_columns()
+	return fieldnames[-1] if fieldnames else ""

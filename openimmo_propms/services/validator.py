@@ -80,13 +80,12 @@ def validate_xml_against_xsd(xml_content_or_path, xsd_name="openimmo_127c.xsd"):
 
 
 def _get_absolute_path(file_url):
-	"""Convert Frappe file URL to absolute path"""
-	if file_url.startswith("/private/files/"):
-		return frappe.get_site_path("private", "files", os.path.basename(file_url))
-	elif file_url.startswith("/files/"):
-		return frappe.get_site_path("public", "files", os.path.basename(file_url))
-	else:
-		return frappe.get_site_path("public", file_url.lstrip("/"))
+	"""Resolve a Frappe file URL to a path inside the site's own files directory.
+
+	Only the base name is used, so a traversal payload cannot escape the site.
+	"""
+	folder = "private" if file_url.startswith("/private/files/") else "public"
+	return frappe.get_site_path(folder, "files", os.path.basename(file_url))
 
 
 def _has_required_elements(root):

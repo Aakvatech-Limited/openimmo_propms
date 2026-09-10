@@ -790,6 +790,8 @@ def _get_requested_fieldnames(source):
 def _sanitize_query_fields(fieldnames):
 	cleaned = []
 	for fieldname in fieldnames or []:
+		if fieldname is None:
+			continue
 		text = str(fieldname).strip()
 		if text:
 			cleaned.append(text)
