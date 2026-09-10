@@ -52,6 +52,8 @@
   "email_account",
   "email_folder",
   "api_endpoint",
+  "data_split_node",
+  "xml_namespace",
   "api_key",
   "ftp_host",
   "ftp_port",
@@ -66,7 +68,8 @@
   "last_sync_at",
   "status",
   "column_break_status",
-  "last_sync_status"
+  "last_sync_status",
+  "last_sync_count"
  ],
  "fields": [
   {
@@ -379,6 +382,20 @@
    "label": "API Endpoint"
   },
   {
+   "depends_on": "eval:doc.source_type == 'API'",
+   "fieldname": "data_split_node",
+   "fieldtype": "Data",
+   "label": "Data Split Node",
+   "description": "XML element that separates one record from the next in the API response"
+  },
+  {
+   "depends_on": "eval:doc.source_type == 'API'",
+   "fieldname": "xml_namespace",
+   "fieldtype": "Data",
+   "label": "XML Namespace",
+   "description": "Namespace URI used to resolve the Data Split Node"
+  },
+  {
    "depends_on": "eval:doc.operation_type=='Import' && doc.source_type=='API'",
    "fieldname": "api_key",
    "fieldtype": "Password",
@@ -464,6 +481,13 @@
    "fieldtype": "Data",
    "label": "Last Sync Status",
    "read_only": 1
+  },
+  {
+   "fieldname": "last_sync_count",
+   "fieldtype": "Int",
+   "label": "Last Sync Count",
+   "read_only": 1,
+   "description": "Number of files received during the last sync"
   }
  ],
  "hide_toolbar": 1,
@@ -475,7 +499,7 @@
    "link_fieldname": "source_name"
   }
  ],
- "modified": "2026-07-08 21:35:19.856631",
+ "modified": "2026-09-10 10:29:02.581777",
  "modified_by": "Administrator",
  "module": "Openimmo Propms",
  "name": "Integration Source",

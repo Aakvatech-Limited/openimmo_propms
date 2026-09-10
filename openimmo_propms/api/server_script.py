@@ -5,10 +5,12 @@ from openimmo_propms.services.processor import run_integration_engine
 
 
 @frappe.whitelist()
-def import_lead_xml(file_url, source_name=None):
+def import_lead_xml(file_url: str, source_name: str | None = None):
 	"""
 	Creates an Integration Job for the uploaded XML and processes it immediately.
 	"""
+	frappe.has_permission("Integration Job", "create", throw=True)
+
 	if not source_name:
 		# Fallback to finding any Manual Upload source if not provided
 		source_name = frappe.db.get_value(
@@ -30,7 +32,7 @@ def import_lead_xml(file_url, source_name=None):
 			"received_at": now_datetime(),
 		}
 	)
-	job.insert(ignore_permissions=True)
+	job.insert()
 
 	# Process immediately
 	run_integration_engine(job.name)
