@@ -97,8 +97,8 @@ def evaluate_quality_gate_for_export(source, records: list[dict]) -> list[dict]:
 				}
 			)
 		else:
-			reasons_str = ", ".join(reasons) if reasons else "Failed Quality Gate"
-			blocked_summary.append(f"- {rec_id}: {reasons_str}")
+			blocked_summary.append({"name": rec_id, "reasons": reasons if reasons else ["Failed Quality Gate"]})
+			reasons_str = "Quality Gate: " + (", ".join(reasons) if reasons else "Failed Quality Gate")
 			processing_details.append(
 				{
 					"record_type": record_type,
@@ -116,10 +116,11 @@ def evaluate_quality_gate_for_export(source, records: list[dict]) -> list[dict]:
 		freq = getattr(source, "sync_frequency", None) or (
 			source.get("sync_frequency") if isinstance(source, dict) else "Manual"
 		)
+		log_details = [f"- {b['name']}: {', '.join(b['reasons'])}" for b in blocked_summary]
 		frappe.log_error(
 			message=f"Export execution for {source_name}: {len(blocked_summary)} properties blocked by Quality Gate:\n"
-			+ "\n".join(blocked_summary),
+			+ "\n".join(log_details),
 			title=f"[{freq}] Quality Gate Summary ({len(blocked_summary)} Blocked)",
 		)
 
-	return valid_records
+	return valid_records, blocked_summary
