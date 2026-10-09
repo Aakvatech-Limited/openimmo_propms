@@ -31,7 +31,7 @@ dev = [
 [tool.bench.frappe-dependencies]
 frappe = ">=15.0.0,<17.0.0"
 erpnext = ">=15.0.0,<17.0.0"
-propms = ">=15.3.0,<16.0.0"
+propms = ">=15.3.0,<17.0.0"
 
 [tool.ruff]
 line-length = 110
