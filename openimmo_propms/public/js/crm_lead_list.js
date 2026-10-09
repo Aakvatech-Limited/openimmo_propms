@@ -1,4 +1,4 @@
-frappe.listview_settings["CRM Lead"] = {
+const openimmo_lead_import = {
 	refresh: function (listview) {
 		listview.page.add_inner_button(__("Import Lead XML"), function () {
 			new frappe.ui.Dialog({
@@ -50,3 +50,7 @@ frappe.listview_settings["CRM Lead"] = {
 		});
 	},
 };
+
+for (const doctype of ["CRM Lead", "Lead"]) {
+	frappe.listview_settings[doctype] = openimmo_lead_import;
+}
