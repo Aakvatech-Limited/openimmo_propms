@@ -21,13 +21,7 @@ class IntegrationJob(Document):
 		self.set_status()
 
 	def set_status(self):
-		"""
-		Derived status based on record counts.
-		Only updates if not currently 'Processing' and processing has occurred.
-		"""
-		if self.status == "Processing":
-			return
-
+		"""Derive the status from the record counts, once any record has been processed."""
 		if not (self.successful_records or self.failed_records or self.skipped_records):
 			return
 
@@ -41,8 +35,7 @@ class IntegrationJob(Document):
 	def _validate_file_extension(self):
 		"""Ensures only XML files are processed."""
 		if self.xml_file:
-			# Use splitext for robust extension checking
-			_, extension = os.path.splitext(self.xml_file.lower())
+			extension = os.path.splitext(self.xml_file.lower())[1]
 			if extension != ".xml":
 				frappe.throw(_("Invalid file format. Please upload an XML file."))
 
