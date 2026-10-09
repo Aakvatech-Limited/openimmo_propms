@@ -161,6 +161,11 @@ def _ensure_mandatory_openimmo_fields(mapped_data, record_data, source):
 		mapped_data["objektkategorie.user_defined_simplefield@feldname"] = ""
 
 
+def _has_property_type_column(doctype):
+	"""The custom_property_type field only exists on property-like target doctypes."""
+	return bool(doctype) and frappe.get_meta(doctype).has_field("custom_property_type")
+
+
 def _resolve_property_type_from_record(mapped_data, record_data, source):
 	"""Fetch Property Type details and map to OpenImmo objektart."""
 	# Use erpnext_id from mapping if available, otherwise record name or custom_unit_id
@@ -168,12 +173,12 @@ def _resolve_property_type_from_record(mapped_data, record_data, source):
 
 	property_type_name = record_data.get("custom_property_type")
 
-	if not property_type_name and erpnext_id and source.target_doctype:
+	if not property_type_name and erpnext_id and _has_property_type_column(source.target_doctype):
 		# Try fetching from the actual record in the target doctype
 		property_type_name = frappe.db.get_value(source.target_doctype, erpnext_id, "custom_property_type")
 
 		# Fallback: maybe the ID is custom_unit_id as in user's example
-		if not property_type_name:
+		if not property_type_name and frappe.get_meta(source.target_doctype).has_field("custom_unit_id"):
 			property_type_name = frappe.db.get_value(
 				source.target_doctype, {"custom_unit_id": erpnext_id}, "custom_property_type"
 			)

@@ -45,7 +45,7 @@ def map_external_data_to_doctype(source_name, entry_data):
 			# 2. Type Casting and Special Handling for Link Fields
 			value = cast_value_to_fieldtype(value, df, mapping.auto_create_link, mapping.link_target_doctype)
 
-			if value:
+			if value is not None:
 				target_doc.set(mapping.target_field, value)
 			elif df.reqd:
 				raise Exception(
