@@ -60,7 +60,7 @@ def validate_quality_gate(source, record: dict) -> tuple[bool, list[str]]:
 def evaluate_quality_gate_for_export(source, records: list[dict]) -> list[dict]:
     """
     Evaluates Quality Gate for a batch of export records, filters out blocked properties,
-    and logs an error summary for properties that failed quality gate checks.
+    logs an error summary, and stores per-record decisions for the Integration Job details.
 
     Args:
         source: Integration Source document or context dict.
@@ -71,19 +71,49 @@ def evaluate_quality_gate_for_export(source, records: list[dict]) -> list[dict]:
     """
     valid_records = []
     blocked_summary = []
+    processing_details = []
+
+    source_name = getattr(source, "name", None) or (
+        source.get("name") if isinstance(source, dict) else "Unknown"
+    )
+    record_type = getattr(source, "target_doctype", None) or (
+        source.get("target_doctype") if isinstance(source, dict) else None
+    )
 
     for record in records:
         is_valid, reasons = validate_quality_gate(source, record)
+        rec_id = record.get("name") or record.get("title") or "Property"
+
         if is_valid:
             valid_records.append(record)
+            processing_details.append(
+                {
+                    "record_type": record_type,
+                    "record_id": rec_id,
+                    "status": "Success",
+                    "error_message": "",
+                }
+            )
         else:
-            rec_id = record.get("name") or record.get("title") or "Property"
             reasons_str = ", ".join(reasons) if reasons else "Failed Quality Gate"
             blocked_summary.append(f"- {rec_id}: {reasons_str}")
+            processing_details.append(
+                {
+                    "record_type": record_type,
+                    "record_id": rec_id,
+                    "status": "Skipped",
+                    "error_message": reasons_str,
+                }
+            )
+
+    details_by_source = getattr(frappe.local, "openimmo_quality_gate_details", None) or {}
+    details_by_source[source_name] = processing_details
+    frappe.local.openimmo_quality_gate_details = details_by_source
 
     if blocked_summary:
-        source_name = getattr(source, "name", None) or (source.get("name") if isinstance(source, dict) else "Unknown")
-        freq = getattr(source, "sync_frequency", None) or (source.get("sync_frequency") if isinstance(source, dict) else "Manual")
+        freq = getattr(source, "sync_frequency", None) or (
+            source.get("sync_frequency") if isinstance(source, dict) else "Manual"
+        )
         frappe.log_error(
             message=f"Export execution for {source_name}: {len(blocked_summary)} properties blocked by Quality Gate:\n"
             + "\n".join(blocked_summary),
