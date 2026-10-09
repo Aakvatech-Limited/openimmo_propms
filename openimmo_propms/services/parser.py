@@ -45,7 +45,10 @@ def get_dict_from_xml(file_url):
 
 
 def get_absolute_path(file_url):
-	"""Resolves Frappe file URL to local system path."""
-	if file_url.startswith("/private/files/"):
-		return frappe.get_site_path("private", "files", os.path.basename(file_url))
-	return frappe.get_site_path("public", file_url.lstrip("/"))
+	"""Resolve a Frappe file URL to a path inside the site's own files directory.
+
+	Only the base name is used, so a traversal payload cannot reach another
+	directory or promote a public URL into the private files folder.
+	"""
+	folder = "private" if file_url.startswith("/private/files/") else "public"
+	return frappe.get_site_path(folder, "files", os.path.basename(file_url))

@@ -8,10 +8,11 @@ from openimmo_propms.services.parser import get_dict_from_xml
 
 
 @frappe.whitelist()
-def run_integration_engine(job_name):
+def run_integration_engine(job_name: str):
 	"""
 	Main orchestrator to process an Integration Job.
 	"""
+	frappe.has_permission("Integration Job", "write", doc=job_name, throw=True)
 	job = frappe.get_doc("Integration Job", job_name)
 	source = frappe.get_doc("Integration Source", job.source_name)
 

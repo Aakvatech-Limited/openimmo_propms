@@ -12,8 +12,9 @@ from openimmo_propms.services.processor import run_integration_engine
 
 
 @frappe.whitelist()
-def test_integration_connection(source_name):
+def test_integration_connection(source_name: str):
 	"""Verifies the connection to the integration source without processing files."""
+	frappe.has_permission("Integration Source", "write", doc=source_name, throw=True)
 	source = frappe.get_doc("Integration Source", source_name)
 	try:
 		if source.operation_type == "Export" and source.source_type != "FTP":
@@ -35,6 +36,7 @@ def test_integration_connection(source_name):
 @frappe.whitelist(methods=["POST"])
 def execute_sync(source_name):
 	"""Execute sync for a specific integration source"""
+	frappe.has_permission("Integration Source", "write", doc=source_name, throw=True)
 	source = frappe.get_doc("Integration Source", source_name)
 	try:
 		if source.operation_type == "Export":
