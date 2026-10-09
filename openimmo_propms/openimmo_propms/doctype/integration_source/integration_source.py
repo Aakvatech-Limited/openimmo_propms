@@ -130,7 +130,7 @@ class IntegrationSource(Document):
 		# This will be implemented with scheduler hooks
 		pass
 
-	@frappe.whitelist()
+	@frappe.whitelist(methods=["POST"])
 	def sync_now(self):
 		"""Trigger manual sync"""
 		if not self.enabled:
@@ -141,6 +141,7 @@ class IntegrationSource(Document):
 			source_name=self.name,
 			queue="short",
 			timeout=300,
+			enqueue_after_commit=True,
 		)
 
 		frappe.msgprint(_("Sync job queued successfully"), alert=True, indicator="green")

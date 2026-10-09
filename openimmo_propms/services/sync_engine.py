@@ -33,8 +33,8 @@ def test_integration_connection(source_name: str):
 		return {"status": "error", "message": str(e)}
 
 
-@frappe.whitelist()
-def execute_sync(source_name: str):
+@frappe.whitelist(methods=["POST"])
+def execute_sync(source_name):
 	"""Execute sync for a specific integration source"""
 	frappe.has_permission("Integration Source", "write", doc=source_name, throw=True)
 	source = frappe.get_doc("Integration Source", source_name)
