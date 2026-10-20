@@ -72,8 +72,7 @@
   {
    "fieldname": "xml_file",
    "fieldtype": "Attach",
-   "label": "XML File",
-   "reqd": 1
+   "label": "XML File"
   },
   {
    "fieldname": "file_name",

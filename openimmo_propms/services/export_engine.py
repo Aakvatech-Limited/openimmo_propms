@@ -1,8 +1,11 @@
 import ftplib
 import hashlib
+import zipfile
 from copy import deepcopy
 from io import BytesIO
 from pathlib import Path
+
+import requests
 
 import frappe
 from frappe import _
@@ -81,11 +84,21 @@ def run_export(source_name, **kwargs):
 
 			# For simplicity in the existing batch flow, we pack it into a 'documents' list structure
 			# (Though XSD builder currently returns the whole doc, we adapt it)
+			all_image_urls = []
+			if cint(getattr(source, "send_as_zip", 0)):
+				seen = set()
+				for record in records:
+					for url in _collect_image_urls(source, record):
+						if url not in seen:
+							all_image_urls.append(url)
+							seen.add(url)
+
 			documents = [
 				{
 					"filename": _build_batch_filename(source),
 					"xml_content": _normalize_xml_document(xml_content),
 					"record_count": len(records),
+					"image_urls": all_image_urls,
 				}
 			]
 		else:
@@ -106,33 +119,38 @@ def run_export(source_name, **kwargs):
 
 		for document in documents:
 			xml_hash = _build_xml_hash(document["xml_content"])
+
+			if cint(getattr(source, "send_as_zip", 0)):
+				upload_filename = document["filename"].rsplit(".", 1)[0] + ".zip"
+				upload_content = _build_zip_package(
+					document["filename"], document["xml_content"], document.get("image_urls")
+				)
+			else:
+				upload_filename = document["filename"]
+				upload_content = document["xml_content"].encode("utf-8")
+
 			skipped_for_job = skipped_records if not responses else 0
 			response = {
 				"status": "success",
 				"record_count": document["record_count"],
 				"total_records": document["record_count"] + skipped_for_job,
 				"skipped_records": skipped_for_job,
-				"filename": document["filename"],
+				"filename": upload_filename,
 				"xml_hash": xml_hash,
 			}
 
 			if should_save:
-				file_doc = _save_export_file(
-					document["filename"],
-					document["xml_content"],
-					source.name,
-				)
+				file_doc = _save_export_file(upload_filename, upload_content, source.name)
 				response["file_url"] = file_doc.file_url
 			else:
 				response["xml"] = document["xml_content"]
 
-			delivery_result = _deliver_export(source, document["filename"], document["xml_content"], xml_hash)
+			delivery_result = _deliver_export(source, upload_filename, upload_content, xml_hash)
 			if delivery_result:
 				response.update(delivery_result)
 
-			if should_save:
-				job = _create_export_job(source, response)
-				response["job_name"] = job.name
+			job = _create_export_job(source, response)
+			response["job_name"] = job.name
 
 			responses.append(response)
 
@@ -171,9 +189,9 @@ def _validate_export_source(source):
 		frappe.throw(_("XML Template must include the {{record_blocks}} placeholder"))
 
 
-def _deliver_export(source, filename, xml_content, xml_hash):
+def _deliver_export(source, filename, content_bytes, xml_hash):
 	if source.source_type == "FTP" and cint(source.ftp_transfer_enabled):
-		return _upload_via_ftp(source, filename, xml_content, xml_hash)
+		return _upload_via_ftp(source, filename, content_bytes, xml_hash)
 
 	return {
 		"delivery_channel": source.source_type or "Manual Upload",
@@ -182,21 +200,34 @@ def _deliver_export(source, filename, xml_content, xml_hash):
 
 
 def _build_export_documents(source, export_records, params):
+	collect_images = cint(getattr(source, "send_as_zip", 0))
+
 	if source.record_packaging == "Separate XML per Record":
 		return [
 			{
 				"filename": _build_record_filename(source, index + 1),
 				"xml_content": _build_xml_content(source, [export_record], params),
 				"record_count": 1,
+				"image_urls": _collect_image_urls(source, export_record[0]) if collect_images else [],
 			}
 			for index, export_record in enumerate(export_records)
 		]
+
+	all_image_urls = []
+	if collect_images:
+		seen = set()
+		for record, _ in export_records:
+			for url in _collect_image_urls(source, record):
+				if url not in seen:
+					all_image_urls.append(url)
+					seen.add(url)
 
 	return [
 		{
 			"filename": _build_batch_filename(source),
 			"xml_content": _build_xml_content(source, export_records, params),
 			"record_count": len(export_records),
+			"image_urls": all_image_urls,
 		}
 	]
 
@@ -941,7 +972,7 @@ def _create_export_job(source, response):
 			"doctype": "Integration Job",
 			"source_name": source.name,
 			"status": "Success",
-			"xml_file": response["file_url"],
+			"xml_file": response.get("file_url"),
 			"file_name": response["filename"],
 			"xml_hash": response.get("xml_hash"),
 			"delivery_channel": response.get("delivery_channel"),
@@ -994,7 +1025,52 @@ def _summarize_export_response(source, responses):
 	}
 
 
-def _upload_via_ftp(source, filename, xml_content, xml_hash):
+def _get_image_bytes_and_name(url):
+	import os
+	clean_url = (url or "").split("?")[0]
+	img_name = clean_url.split("/")[-1] or "image"
+
+	# 1. Try local filesystem if it's a Frappe file path
+	file_doc_name = None
+	if "/files/" in clean_url or "/private/files/" in clean_url:
+		file_part = clean_url[clean_url.find("/files/"):] if "/files/" in clean_url else clean_url[clean_url.find("/private/files/"):]
+		possible_paths = [
+			frappe.get_site_path("public", "files", img_name),
+			frappe.get_site_path("private", "files", img_name),
+			frappe.get_site_path("public", file_part.lstrip("/")),
+		]
+		for path in possible_paths:
+			if os.path.exists(path):
+				with open(path, "rb") as f:
+					return f.read(), img_name
+
+	# 2. Fallback to HTTP download
+	if url.startswith(("http://", "https://")):
+		resp = requests.get(url, timeout=15, headers={"User-Agent": "OpenImmo-Export/1.0"})
+		resp.raise_for_status()
+		return resp.content, img_name
+
+	return None, img_name
+
+
+def _build_zip_package(xml_filename, xml_content, image_urls):
+	buf = BytesIO()
+	with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+		zf.writestr(xml_filename, xml_content.encode("utf-8"))
+		for url in image_urls or []:
+			try:
+				content, img_name = _get_image_bytes_and_name(url)
+				if content:
+					zf.writestr(img_name, content)
+				else:
+					frappe.logger("openimmo_export").warning(f"ZIP: could not resolve image content {url}")
+			except Exception as e:
+				frappe.logger("openimmo_export").warning(f"ZIP: skipped image {url}: {e}")
+	buf.seek(0)
+	return buf.read()
+
+
+def _upload_via_ftp(source, filename, content_bytes, xml_hash):
 	if not source.ftp_host:
 		frappe.throw(_("FTP Host is required for FTP export delivery"))
 
@@ -1012,10 +1088,7 @@ def _upload_via_ftp(source, filename, xml_content, xml_hash):
 		if source.ftp_directory:
 			ftp.cwd(source.ftp_directory)
 
-		ftp.storbinary(
-			f"STOR {filename}",
-			BytesIO(xml_content.encode("utf-8")),
-		)
+		ftp.storbinary(f"STOR {filename}", BytesIO(content_bytes))
 	finally:
 		try:
 			ftp.quit()
