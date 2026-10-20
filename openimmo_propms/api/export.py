@@ -13,8 +13,25 @@ def run_openimmo_export(
 	property_name=None,
 	anbieter_id=None,
 	save_file=None,
+	run_in_background=False,
 ):
 	"""Whitelisted wrapper for the minimal metadata-driven export flow."""
+	from frappe.utils import cint
+	if cint(run_in_background):
+		frappe.enqueue(
+			"openimmo_propms.services.export_engine.run_export",
+			queue="long",
+			timeout=600,
+			source_name=source_name,
+			filter_publish=filter_publish,
+			filter_status=filter_status,
+			filter_company=filter_company,
+			property_name=property_name,
+			anbieter_id=anbieter_id,
+			save_file=save_file,
+		)
+		return {"status": "queued", "message": _("Export queued in background.")}
+
 	return run_export(
 		source_name=source_name,
 		filter_publish=filter_publish,

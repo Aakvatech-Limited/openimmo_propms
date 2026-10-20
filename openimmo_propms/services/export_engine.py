@@ -967,11 +967,17 @@ def _create_export_job(source, response):
 	details_by_source = getattr(frappe.local, "openimmo_quality_gate_details", None) or {}
 	processing_details = details_by_source.get(source.name, []) if skipped_records else []
 
+	status = "Success"
+	if response.get("delivery_status") == "failed":
+		status = "Failed"
+	elif skipped_records:
+		status = "Partially Completed"
+
 	job = frappe.get_doc(
 		{
 			"doctype": "Integration Job",
 			"source_name": source.name,
-			"status": "Success",
+			"status": status,
 			"xml_file": response.get("file_url"),
 			"file_name": response["filename"],
 			"xml_hash": response.get("xml_hash"),
@@ -1083,26 +1089,37 @@ def _upload_via_ftp(source, filename, content_bytes, xml_hash):
 			"delivery_target": delivery_target,
 		}
 
-	ftp = _connect_ftp(source)
 	try:
-		if source.ftp_directory:
-			ftp.cwd(source.ftp_directory)
-
-		ftp.storbinary(f"STOR {filename}", BytesIO(content_bytes))
-	finally:
+		ftp = _connect_ftp(source)
 		try:
-			ftp.quit()
-		except Exception:
-			ftp.close()
+			if source.ftp_directory:
+				ftp.cwd(source.ftp_directory)
 
-	source.db_set("last_sync_status", _("Export uploaded successfully"))
-	source.db_set("last_sync_at", frappe.utils.now())
+			ftp.storbinary(f"STOR {filename}", BytesIO(content_bytes))
+		finally:
+			try:
+				ftp.quit()
+			except Exception:
+				ftp.close()
 
-	return {
-		"delivery_channel": "FTP",
-		"delivery_status": "uploaded",
-		"delivery_target": delivery_target,
-	}
+		source.db_set("last_sync_status", _("Export uploaded successfully"))
+		source.db_set("last_sync_at", frappe.utils.now())
+
+		return {
+			"delivery_channel": "FTP",
+			"delivery_status": "uploaded",
+			"delivery_target": delivery_target,
+		}
+	except Exception as exc:
+		error_msg = f"FTP upload failed: {exc!s}"
+		frappe.logger("openimmo_export").error(error_msg)
+		source.db_set("last_sync_status", _("FTP upload failed: {0}").format(str(exc)[:100]))
+		return {
+			"delivery_channel": "FTP",
+			"delivery_status": "failed",
+			"delivery_target": delivery_target,
+			"error": str(exc),
+		}
 
 
 def _build_ftp_delivery_target(source):
@@ -1137,9 +1154,9 @@ def _connect_ftp(source):
 	password = source.get_password("ftp_password")
 
 	try:
-		ftp = ftplib.FTP_TLS(timeout=60)
+		ftp = ftplib.FTP_TLS(timeout=30)
 		ftp.encoding = "utf-8"
-		ftp.connect(host, port)
+		ftp.connect(host, port, timeout=30)
 		if user:
 			ftp.login(user, password)
 			ftp.prot_p()
@@ -1148,9 +1165,9 @@ def _connect_ftp(source):
 		ftp.set_pasv(True)
 		return ftp
 	except Exception as exc:
-		frappe.log_error(f"FTP TLS failed, trying plain FTP: {exc!s}", "FTP Export")
-		ftp = ftplib.FTP(timeout=60)
-		ftp.connect(host, port)
+		frappe.logger("openimmo_export").warning(f"FTP TLS failed, trying plain FTP: {exc!s}")
+		ftp = ftplib.FTP(timeout=30)
+		ftp.connect(host, port, timeout=30)
 		ftp.login(user, password)
 		ftp.set_pasv(True)
 		return ftp

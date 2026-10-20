@@ -107,28 +107,14 @@ frappe.ui.form.on("Integration Source", {
 						args: {
 							source_name: frm.doc.name,
 							save_file: 1,
+							run_in_background: 1,
 						},
-						freeze: true,
-						freeze_message: __("Generating and uploading OpenImmo XML..."),
 						callback: (r) => {
 							if (!r.exc && r.message) {
-								let file_link = r.message.file_url
-									? `<a href="${r.message.file_url}" target="_blank">${r.message.file_url}</a>`
-									: __("Not saved");
-
-								frappe.msgprint({
-									title: __("Export Completed"),
-									message: __(
-										"Records: {0}<br>Delivery: {1}<br>Channel: {2}<br>File: {3}",
-										[
-											r.message.record_count || 0,
-											r.message.delivery_status || __("Generated"),
-											r.message.delivery_channel || __("Manual"),
-											file_link,
-										]
-									),
+								frappe.show_alert({
+									message: __("Export has been queued in background. Check Integration Job for status."),
 									indicator: "green",
-								});
+								}, 5);
 								frm.reload_doc();
 							}
 						},
