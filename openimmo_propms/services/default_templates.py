@@ -336,7 +336,7 @@ OPENIMMO_JINJA_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
                             {%- endif -%}
 
                             <anhang location="EXTERN" gruppe="{{ 'TITELBILD' if is_hero else 'BILD' }}">
-                                <format>{{ img_path.split('.')[-1].upper() if '.' in img_path else 'JPEG' }}</format>
+                                <format>{{ 'JPEG' if (img_path.split('.')[-1].upper() if '.' in img_path else 'JPEG') == 'WEBP' else (img_path.split('.')[-1].upper() if '.' in img_path else 'JPEG') }}</format>
                                 <daten>
                                     <pfad>{{ img_path if img_path.startswith(('http://', 'https://')) else ((source.base_media_url or frappe.utils.get_url()).rstrip('/') ~ '/' ~ img_path.lstrip('/')) }}</pfad>
                                 </daten>

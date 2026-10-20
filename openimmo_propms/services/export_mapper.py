@@ -82,7 +82,7 @@ def build_property_data(source, record):
 				ext = img_path.split(".")[-1].upper() if "." in img_path else None
 				if not ext:
 					frappe.throw(f"Mandatory image format missing for {img_path}")
-				format_map = {"JPG": "JPEG", "JPEG": "JPEG", "PNG": "PNG", "GIF": "GIF"}
+				format_map = {"JPG": "JPEG", "JPEG": "JPEG", "PNG": "PNG", "GIF": "GIF", "WEBP": "JPEG"}
 				mapped_data[f"anhaenge.anhang.{i}.format"] = format_map.get(ext, "JPEG")
 
 	# Ensure mandatory fields have values from mapping

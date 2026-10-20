@@ -1036,8 +1036,8 @@ def _get_image_bytes_and_name(url):
 	clean_url = (url or "").split("?")[0]
 	img_name = clean_url.split("/")[-1] or "image"
 
+	raw_bytes = None
 	# 1. Try local filesystem if it's a Frappe file path
-	file_doc_name = None
 	if "/files/" in clean_url or "/private/files/" in clean_url:
 		file_part = clean_url[clean_url.find("/files/"):] if "/files/" in clean_url else clean_url[clean_url.find("/private/files/"):]
 		possible_paths = [
@@ -1048,15 +1048,32 @@ def _get_image_bytes_and_name(url):
 		for path in possible_paths:
 			if os.path.exists(path):
 				with open(path, "rb") as f:
-					return f.read(), img_name
+					raw_bytes = f.read()
+					break
 
 	# 2. Fallback to HTTP download
-	if url.startswith(("http://", "https://")):
+	if raw_bytes is None and url.startswith(("http://", "https://")):
 		resp = requests.get(url, timeout=15, headers={"User-Agent": "OpenImmo-Export/1.0"})
 		resp.raise_for_status()
-		return resp.content, img_name
+		raw_bytes = resp.content
 
-	return None, img_name
+	if not raw_bytes:
+		return None, img_name
+
+	# Convert WebP to JPEG on-the-fly since real estate portals reject .webp
+	if img_name.lower().endswith(".webp"):
+		try:
+			from PIL import Image
+			with Image.open(BytesIO(raw_bytes)) as pil_img:
+				converted = pil_img.convert("RGB")
+				out_buf = BytesIO()
+				converted.save(out_buf, format="JPEG", quality=100, subsampling=0)
+				jpeg_name = os.path.splitext(img_name)[0] + ".jpg"
+				return out_buf.getvalue(), jpeg_name
+		except Exception as exc:
+			frappe.logger("openimmo_export").warning(f"Failed to convert WebP image {img_name}: {exc}")
+
+	return raw_bytes, img_name
 
 
 def _build_zip_package(xml_filename, xml_content, image_urls):
