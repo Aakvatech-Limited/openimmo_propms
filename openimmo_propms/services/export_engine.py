@@ -7,7 +7,7 @@ from pathlib import Path
 import frappe
 from frappe import _
 from frappe.utils import cint, get_url
-from frappe.utils.file_manager import save_file
+from frappe.utils.file_manager import save_file, save_file_on_filesystem
 
 from openimmo_propms.services.export_mapper import build_property_data
 from openimmo_propms.services.immowelt_xml_creator import build_immowelt_document
@@ -117,12 +117,10 @@ def run_export(source_name, **kwargs):
 			}
 
 			if should_save:
-				file_doc = save_file(
+				file_doc = _save_export_file(
 					document["filename"],
 					document["xml_content"],
-					"Integration Source",
 					source.name,
-					is_private=1,
 				)
 				response["file_url"] = file_doc.file_url
 			else:
@@ -323,11 +321,26 @@ def _export_format_slug(source):
 	return (source.export_format or "xml").lower().replace(" ", "_")
 
 
+def _resolve_filename_placeholders(source, template):
+	return template.format(
+		anbieter_id=source.anbieter_id or "",
+		source_name=source.name or "",
+		regi_id=source.regi_id or "",
+		openimmo_anid=source.openimmo_anid or "",
+	)
+
+
 def _build_batch_filename(source):
+	if source.get("export_file_name"):
+		return _resolve_filename_placeholders(source, source.export_file_name)
 	return f"{source.name.lower().replace(' ', '_')}_{_export_format_slug(source)}_export.xml"
 
 
 def _build_record_filename(source, index):
+	if source.get("export_file_name"):
+		name = _resolve_filename_placeholders(source, source.export_file_name)
+		base, _, ext = name.rpartition(".")
+		return f"{base}_{index:05d}.{ext}" if base else f"{name}_{index:05d}"
 	return f"{source.name.lower().replace(' ', '_')}_{_export_format_slug(source)}_export_{index}.xml"
 
 
@@ -888,6 +901,32 @@ def _should_save_file(source, save_file):
 		return cint(source.save_file_by_default)
 
 	return cint(save_file)
+
+
+def _save_export_file(filename, content, source_name):
+	existing_files = frappe.get_all(
+		"File",
+		filters={"file_name": filename, "attached_to_doctype": "Integration Source", "attached_to_name": source_name},
+		pluck="name",
+	)
+	for fname in existing_files:
+		frappe.delete_doc("File", fname, ignore_permissions=True, force=True)
+
+	file_data = save_file_on_filesystem(filename, content, is_private=1)
+	file_doc = frappe.get_doc(
+		{
+			"doctype": "File",
+			"file_name": filename,
+			"file_url": file_data["file_url"],
+			"attached_to_doctype": "Integration Source",
+			"attached_to_name": source_name,
+			"is_private": 1,
+		}
+	)
+	file_doc.flags.copy_from_existing_file = True
+	file_doc.flags.ignore_permissions = True
+	file_doc.insert()
+	return file_doc
 
 
 def _create_export_job(source, response):

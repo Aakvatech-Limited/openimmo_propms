@@ -28,6 +28,7 @@
   "regi_id",
   "anbieter_id",
   "openimmo_anid",
+  "export_file_name",
   "column_break_export_1",
   "save_file_by_default",
   "ftp_transfer_enabled",
@@ -212,6 +213,13 @@
    "fieldname": "openimmo_anid",
    "fieldtype": "Data",
    "label": "OpenImmo ANID"
+  },
+  {
+   "depends_on": "eval:doc.operation_type=='Export'",
+   "description": "Custom export filename. Supports placeholders: {anbieter_id}, {source_name}, {regi_id}, {openimmo_anid}. Example: {anbieter_id}.xml",
+   "fieldname": "export_file_name",
+   "fieldtype": "Data",
+   "label": "Export File Name"
   },
   {
    "depends_on": "eval:doc.operation_type=='Export'",
@@ -475,7 +483,7 @@
    "link_fieldname": "source_name"
   }
  ],
- "modified": "2026-07-08 21:35:19.856631",
+ "modified": "2026-10-20 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Openimmo Propms",
  "name": "Integration Source",
