@@ -6,14 +6,16 @@ def execute():
 
 	for fieldname in fields:
 		if frappe.db.has_column("Property", fieldname):
-			frappe.db.sql(
-				f"""
-				UPDATE `tabProperty`
-				SET `{fieldname}` = NULL
-				WHERE `{fieldname}` IS NOT NULL
-				AND `{fieldname}` NOT REGEXP '^-?[0-9]+$'
-				"""
+			records = frappe.get_all(
+				"Property", filters={fieldname: ["is", "set"]}, fields=["name", fieldname]
 			)
+			for record in records:
+				val = record.get(fieldname)
+				if val is not None:
+					try:
+						int(val)
+					except (ValueError, TypeError):
+						frappe.db.set_value("Property", record["name"], fieldname, None)
 
 		frappe.db.set_value(
 			"Custom Field",
