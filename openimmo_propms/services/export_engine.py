@@ -34,9 +34,8 @@ def run_export(source_name, **kwargs):
 		_validate_export_source(source)
 
 		records = _get_records_for_export(source, kwargs)
-		total_records = len(records)
-		records = evaluate_quality_gate_for_export(source, records)
-		skipped_records = total_records - len(records)
+		records, blocked = evaluate_quality_gate_for_export(source, records)
+		skipped_records = len(blocked)
 		if not records:
 			if frappe.job:
 				source.db_set("last_sync_status", "Success (No modifications)")
@@ -45,6 +44,8 @@ def run_export(source_name, **kwargs):
 					"status": "success",
 					"record_count": 0,
 					"skipped_records": skipped_records,
+					"blocked_records": blocked,
+					"skipped": len(blocked),
 					"message": "No properties found to export.",
 				}
 			else:
@@ -134,6 +135,8 @@ def run_export(source_name, **kwargs):
 				"record_count": document["record_count"],
 				"total_records": document["record_count"] + skipped_for_job,
 				"skipped_records": skipped_for_job,
+				"blocked_records": blocked if not responses else [],
+				"skipped": len(blocked if not responses else []),
 				"filename": upload_filename,
 				"xml_hash": xml_hash,
 			}
@@ -965,8 +968,8 @@ def _save_export_file(filename, content, source_name):
 
 def _create_export_job(source, response):
 	successful_records = response.get("record_count", 0)
-	skipped_records = response.get("skipped_records", 0)
-	total_records = response.get("total_records", successful_records + skipped_records)
+	skipped_records = len(response.get("blocked_records", []))
+	total_records = successful_records + skipped_records
 	details_by_source = getattr(frappe.local, "openimmo_quality_gate_details", None) or {}
 	processing_details = details_by_source.get(source.name, []) if skipped_records else []
 
@@ -982,7 +985,7 @@ def _create_export_job(source, response):
 			"source_name": source.name,
 			"status": status,
 			"xml_file": response.get("file_url"),
-			"file_name": response["filename"],
+			"file_name": response.get("filename"),
 			"xml_hash": response.get("xml_hash"),
 			"delivery_channel": response.get("delivery_channel"),
 			"delivery_status": response.get("delivery_status"),
@@ -997,6 +1000,7 @@ def _create_export_job(source, response):
 			"processing_details": processing_details,
 		}
 	)
+
 	job.insert(ignore_permissions=True)
 	return job
 
@@ -1004,9 +1008,12 @@ def _create_export_job(source, response):
 def _build_export_log_message(response):
 	delivery_status = response.get("delivery_status", "generated")
 	delivery_channel = response.get("delivery_channel", "Manual")
-	return _("Export completed. Records: {0}, Skipped: {1}, Delivery: {2}, Channel: {3}").format(
+	skipped_count = len(response.get("blocked_records", [])) or response.get("skipped_records", 0)
+	return _(
+		"Export completed. Records: {0}, Skipped (Quality Gate): {1}, Delivery: {2}, Channel: {3}"
+	).format(
 		response.get("record_count", 0),
-		response.get("skipped_records", 0),
+		skipped_count,
 		delivery_status,
 		delivery_channel,
 	)
@@ -1163,7 +1170,7 @@ def _has_successful_ftp_delivery(source_name, xml_hash, delivery_target):
 			"Integration Job",
 			{
 				"source_name": source_name,
-				"status": "Success",
+				"status": ["in", ["Success", "Partially Completed"]],
 				"delivery_channel": "FTP",
 				"delivery_status": "uploaded",
 				"delivery_target": delivery_target,
