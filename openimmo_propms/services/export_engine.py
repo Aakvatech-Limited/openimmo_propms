@@ -1,13 +1,15 @@
 import ftplib
 import hashlib
+import zipfile
 from copy import deepcopy
 from io import BytesIO
 from pathlib import Path
 
 import frappe
+import requests
 from frappe import _
 from frappe.utils import cint, get_url
-from frappe.utils.file_manager import save_file
+from frappe.utils.file_manager import save_file_on_filesystem
 
 from openimmo_propms.services.export_mapper import build_property_data
 from openimmo_propms.services.immowelt_xml_creator import build_immowelt_document
@@ -82,11 +84,21 @@ def run_export(source_name, **kwargs):
 
 			# For simplicity in the existing batch flow, we pack it into a 'documents' list structure
 			# (Though XSD builder currently returns the whole doc, we adapt it)
+			all_image_urls = []
+			if cint(getattr(source, "send_as_zip", 0)):
+				seen = set()
+				for record in records:
+					for url in _collect_image_urls(source, record):
+						if url not in seen:
+							all_image_urls.append(url)
+							seen.add(url)
+
 			documents = [
 				{
 					"filename": _build_batch_filename(source),
 					"xml_content": _normalize_xml_document(xml_content),
 					"record_count": len(records),
+					"image_urls": all_image_urls,
 				}
 			]
 		else:
@@ -107,6 +119,16 @@ def run_export(source_name, **kwargs):
 
 		for document in documents:
 			xml_hash = _build_xml_hash(document["xml_content"])
+
+			if cint(getattr(source, "send_as_zip", 0)):
+				upload_filename = document["filename"].rsplit(".", 1)[0] + ".zip"
+				upload_content = _build_zip_package(
+					document["filename"], document["xml_content"], document.get("image_urls")
+				)
+			else:
+				upload_filename = document["filename"]
+				upload_content = document["xml_content"].encode("utf-8")
+
 			skipped_for_job = skipped_records if not responses else 0
 			response = {
 				"status": "success",
@@ -115,29 +137,22 @@ def run_export(source_name, **kwargs):
 				"skipped_records": skipped_for_job,
 				"blocked_records": blocked if not responses else [],
 				"skipped": len(blocked if not responses else []),
-				"filename": document["filename"],
+				"filename": upload_filename,
 				"xml_hash": xml_hash,
 			}
 
 			if should_save:
-				file_doc = save_file(
-					document["filename"],
-					document["xml_content"],
-					"Integration Source",
-					source.name,
-					is_private=1,
-				)
+				file_doc = _save_export_file(upload_filename, upload_content, source.name)
 				response["file_url"] = file_doc.file_url
 			else:
 				response["xml"] = document["xml_content"]
 
-			delivery_result = _deliver_export(source, document["filename"], document["xml_content"], xml_hash)
+			delivery_result = _deliver_export(source, upload_filename, upload_content, xml_hash)
 			if delivery_result:
 				response.update(delivery_result)
 
-			if should_save:
-				job = _create_export_job(source, response)
-				response["job_name"] = job.name
+			job = _create_export_job(source, response)
+			response["job_name"] = job.name
 
 			responses.append(response)
 
@@ -176,9 +191,9 @@ def _validate_export_source(source):
 		frappe.throw(_("XML Template must include the {{record_blocks}} placeholder"))
 
 
-def _deliver_export(source, filename, xml_content, xml_hash):
+def _deliver_export(source, filename, content_bytes, xml_hash):
 	if source.source_type == "FTP" and cint(source.ftp_transfer_enabled):
-		return _upload_via_ftp(source, filename, xml_content, xml_hash)
+		return _upload_via_ftp(source, filename, content_bytes, xml_hash)
 
 	return {
 		"delivery_channel": source.source_type or "Manual Upload",
@@ -187,21 +202,34 @@ def _deliver_export(source, filename, xml_content, xml_hash):
 
 
 def _build_export_documents(source, export_records, params):
+	collect_images = cint(getattr(source, "send_as_zip", 0))
+
 	if source.record_packaging == "Separate XML per Record":
 		return [
 			{
 				"filename": _build_record_filename(source, index + 1),
 				"xml_content": _build_xml_content(source, [export_record], params),
 				"record_count": 1,
+				"image_urls": _collect_image_urls(source, export_record[0]) if collect_images else [],
 			}
 			for index, export_record in enumerate(export_records)
 		]
+
+	all_image_urls = []
+	if collect_images:
+		seen = set()
+		for record, _ in export_records:
+			for url in _collect_image_urls(source, record):
+				if url not in seen:
+					all_image_urls.append(url)
+					seen.add(url)
 
 	return [
 		{
 			"filename": _build_batch_filename(source),
 			"xml_content": _build_xml_content(source, export_records, params),
 			"record_count": len(export_records),
+			"image_urls": all_image_urls,
 		}
 	]
 
@@ -326,11 +354,26 @@ def _export_format_slug(source):
 	return (source.export_format or "xml").lower().replace(" ", "_")
 
 
+def _resolve_filename_placeholders(source, template):
+	return template.format(
+		anbieter_id=source.anbieter_id or "",
+		source_name=source.name or "",
+		regi_id=source.regi_id or "",
+		openimmo_anid=source.openimmo_anid or "",
+	)
+
+
 def _build_batch_filename(source):
+	if source.get("export_file_name"):
+		return _resolve_filename_placeholders(source, source.export_file_name)
 	return f"{source.name.lower().replace(' ', '_')}_{_export_format_slug(source)}_export.xml"
 
 
 def _build_record_filename(source, index):
+	if source.get("export_file_name"):
+		name = _resolve_filename_placeholders(source, source.export_file_name)
+		base, _, ext = name.rpartition(".")
+		return f"{base}_{index:05d}.{ext}" if base else f"{name}_{index:05d}"
 	return f"{source.name.lower().replace(' ', '_')}_{_export_format_slug(source)}_export_{index}.xml"
 
 
@@ -886,11 +929,41 @@ def _get_child_table_options(doctype_name, fieldname):
 	return None
 
 
-def _should_save_file(source, save_file):
-	if save_file is None:
+def _should_save_file(source, save_file_flag):
+	if save_file_flag is None:
 		return cint(source.save_file_by_default)
 
-	return cint(save_file)
+	return cint(save_file_flag)
+
+
+def _save_export_file(filename, content, source_name):
+	existing_files = frappe.get_all(
+		"File",
+		filters={
+			"file_name": filename,
+			"attached_to_doctype": "Integration Source",
+			"attached_to_name": source_name,
+		},
+		pluck="name",
+	)
+	for fname in existing_files:
+		frappe.delete_doc("File", fname, ignore_permissions=True, force=True)
+
+	file_data = save_file_on_filesystem(filename, content, is_private=1)
+	file_doc = frappe.get_doc(
+		{
+			"doctype": "File",
+			"file_name": filename,
+			"file_url": file_data["file_url"],
+			"attached_to_doctype": "Integration Source",
+			"attached_to_name": source_name,
+			"is_private": 1,
+		}
+	)
+	file_doc.flags.copy_from_existing_file = True
+	file_doc.flags.ignore_permissions = True
+	file_doc.insert()
+	return file_doc
 
 
 def _create_export_job(source, response):
@@ -900,11 +973,17 @@ def _create_export_job(source, response):
 	details_by_source = getattr(frappe.local, "openimmo_quality_gate_details", None) or {}
 	processing_details = details_by_source.get(source.name, []) if skipped_records else []
 
+	status = "Success"
+	if response.get("delivery_status") == "failed":
+		status = "Failed"
+	elif skipped_records:
+		status = "Partially Completed"
+
 	job = frappe.get_doc(
 		{
 			"doctype": "Integration Job",
 			"source_name": source.name,
-			"status": "Partially Completed" if skipped_records > 0 else "Success",
+			"status": status,
 			"xml_file": response.get("file_url"),
 			"file_name": response.get("filename"),
 			"xml_hash": response.get("xml_hash"),
@@ -962,7 +1041,75 @@ def _summarize_export_response(source, responses):
 	}
 
 
-def _upload_via_ftp(source, filename, xml_content, xml_hash):
+def _get_image_bytes_and_name(url):
+	import os
+
+	clean_url = (url or "").split("?")[0]
+	img_name = clean_url.split("/")[-1] or "image"
+
+	raw_bytes = None
+	# 1. Try local filesystem if it's a Frappe file path
+	if "/files/" in clean_url or "/private/files/" in clean_url:
+		file_part = (
+			clean_url[clean_url.find("/files/") :]
+			if "/files/" in clean_url
+			else clean_url[clean_url.find("/private/files/") :]
+		)
+		possible_paths = [
+			frappe.get_site_path("public", "files", img_name),
+			frappe.get_site_path("private", "files", img_name),
+			frappe.get_site_path("public", file_part.lstrip("/")),
+		]
+		for path in possible_paths:
+			if os.path.exists(path):
+				with open(path, "rb") as f:
+					raw_bytes = f.read()
+					break
+
+	# 2. Fallback to HTTP download
+	if raw_bytes is None and url.startswith(("http://", "https://")):
+		resp = requests.get(url, timeout=15, headers={"User-Agent": "OpenImmo-Export/1.0"})
+		resp.raise_for_status()
+		raw_bytes = resp.content
+
+	if not raw_bytes:
+		return None, img_name
+
+	# Convert WebP to JPEG on-the-fly since real estate portals reject .webp
+	if img_name.lower().endswith(".webp"):
+		try:
+			from PIL import Image
+
+			with Image.open(BytesIO(raw_bytes)) as pil_img:
+				converted = pil_img.convert("RGB")
+				out_buf = BytesIO()
+				converted.save(out_buf, format="JPEG", quality=100, subsampling=0)
+				jpeg_name = os.path.splitext(img_name)[0] + ".jpg"
+				return out_buf.getvalue(), jpeg_name
+		except Exception as exc:
+			frappe.logger("openimmo_export").warning(f"Failed to convert WebP image {img_name}: {exc}")
+
+	return raw_bytes, img_name
+
+
+def _build_zip_package(xml_filename, xml_content, image_urls):
+	buf = BytesIO()
+	with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+		zf.writestr(xml_filename, xml_content.encode("utf-8"))
+		for url in image_urls or []:
+			try:
+				content, img_name = _get_image_bytes_and_name(url)
+				if content:
+					zf.writestr(img_name, content)
+				else:
+					frappe.logger("openimmo_export").warning(f"ZIP: could not resolve image content {url}")
+			except Exception as e:
+				frappe.logger("openimmo_export").warning(f"ZIP: skipped image {url}: {e}")
+	buf.seek(0)
+	return buf.read()
+
+
+def _upload_via_ftp(source, filename, content_bytes, xml_hash):
 	if not source.ftp_host:
 		frappe.throw(_("FTP Host is required for FTP export delivery"))
 
@@ -975,29 +1122,37 @@ def _upload_via_ftp(source, filename, xml_content, xml_hash):
 			"delivery_target": delivery_target,
 		}
 
-	ftp = _connect_ftp(source)
 	try:
-		if source.ftp_directory:
-			ftp.cwd(source.ftp_directory)
-
-		ftp.storbinary(
-			f"STOR {filename}",
-			BytesIO(xml_content.encode("utf-8")),
-		)
-	finally:
+		ftp = _connect_ftp(source)
 		try:
-			ftp.quit()
-		except Exception:
-			ftp.close()
+			if source.ftp_directory:
+				ftp.cwd(source.ftp_directory)
 
-	source.db_set("last_sync_status", _("Export uploaded successfully"))
-	source.db_set("last_sync_at", frappe.utils.now())
+			ftp.storbinary(f"STOR {filename}", BytesIO(content_bytes))
+		finally:
+			try:
+				ftp.quit()
+			except Exception:
+				ftp.close()
 
-	return {
-		"delivery_channel": "FTP",
-		"delivery_status": "uploaded",
-		"delivery_target": delivery_target,
-	}
+		source.db_set("last_sync_status", _("Export uploaded successfully"))
+		source.db_set("last_sync_at", frappe.utils.now())
+
+		return {
+			"delivery_channel": "FTP",
+			"delivery_status": "uploaded",
+			"delivery_target": delivery_target,
+		}
+	except Exception as exc:
+		error_msg = f"FTP upload failed: {exc!s}"
+		frappe.logger("openimmo_export").error(error_msg)
+		source.db_set("last_sync_status", _("FTP upload failed: {0}").format(str(exc)[:100]))
+		return {
+			"delivery_channel": "FTP",
+			"delivery_status": "failed",
+			"delivery_target": delivery_target,
+			"error": str(exc),
+		}
 
 
 def _build_ftp_delivery_target(source):
@@ -1032,9 +1187,9 @@ def _connect_ftp(source):
 	password = source.get_password("ftp_password")
 
 	try:
-		ftp = ftplib.FTP_TLS(timeout=60)
+		ftp = ftplib.FTP_TLS(timeout=30)
 		ftp.encoding = "utf-8"
-		ftp.connect(host, port)
+		ftp.connect(host, port, timeout=30)
 		if user:
 			ftp.login(user, password)
 			ftp.prot_p()
@@ -1043,9 +1198,9 @@ def _connect_ftp(source):
 		ftp.set_pasv(True)
 		return ftp
 	except Exception as exc:
-		frappe.log_error(f"FTP TLS failed, trying plain FTP: {exc!s}", "FTP Export")
-		ftp = ftplib.FTP(timeout=60)
-		ftp.connect(host, port)
+		frappe.logger("openimmo_export").warning(f"FTP TLS failed, trying plain FTP: {exc!s}")
+		ftp = ftplib.FTP(timeout=30)
+		ftp.connect(host, port, timeout=30)
 		ftp.login(user, password)
 		ftp.set_pasv(True)
 		return ftp

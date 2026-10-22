@@ -39,12 +39,12 @@ class IntegrationJob(Document):
 			self.status = "Partially Completed"
 
 	def _validate_file_extension(self):
-		"""Ensures only XML files are processed."""
+		"""Ensures only XML or ZIP files are processed."""
 		if self.xml_file:
 			# Use splitext for robust extension checking
 			_, extension = os.path.splitext(self.xml_file.lower())
-			if extension != ".xml":
-				frappe.throw(_("Invalid file format. Please upload an XML file."))
+			if extension not in (".xml", ".zip"):
+				frappe.throw(_("Invalid file format. Please upload an XML or ZIP file."))
 
 	def _set_file_name(self):
 		"""Automatically sets file_name from the attached path."""
@@ -67,7 +67,7 @@ class IntegrationJob(Document):
 # --- Whitelisted API Actions ---
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def process_now(name=None):
 	"""
 	Directly executes the integration job synchronously.
