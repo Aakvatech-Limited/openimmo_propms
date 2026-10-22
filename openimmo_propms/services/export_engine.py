@@ -5,12 +5,11 @@ from copy import deepcopy
 from io import BytesIO
 from pathlib import Path
 
-import requests
-
 import frappe
+import requests
 from frappe import _
 from frappe.utils import cint, get_url
-from frappe.utils.file_manager import save_file, save_file_on_filesystem
+from frappe.utils.file_manager import save_file_on_filesystem
 
 from openimmo_propms.services.export_mapper import build_property_data
 from openimmo_propms.services.immowelt_xml_creator import build_immowelt_document
@@ -927,17 +926,21 @@ def _get_child_table_options(doctype_name, fieldname):
 	return None
 
 
-def _should_save_file(source, save_file):
-	if save_file is None:
+def _should_save_file(source, save_file_flag):
+	if save_file_flag is None:
 		return cint(source.save_file_by_default)
 
-	return cint(save_file)
+	return cint(save_file_flag)
 
 
 def _save_export_file(filename, content, source_name):
 	existing_files = frappe.get_all(
 		"File",
-		filters={"file_name": filename, "attached_to_doctype": "Integration Source", "attached_to_name": source_name},
+		filters={
+			"file_name": filename,
+			"attached_to_doctype": "Integration Source",
+			"attached_to_name": source_name,
+		},
 		pluck="name",
 	)
 	for fname in existing_files:
@@ -1033,13 +1036,18 @@ def _summarize_export_response(source, responses):
 
 def _get_image_bytes_and_name(url):
 	import os
+
 	clean_url = (url or "").split("?")[0]
 	img_name = clean_url.split("/")[-1] or "image"
 
 	raw_bytes = None
 	# 1. Try local filesystem if it's a Frappe file path
 	if "/files/" in clean_url or "/private/files/" in clean_url:
-		file_part = clean_url[clean_url.find("/files/"):] if "/files/" in clean_url else clean_url[clean_url.find("/private/files/"):]
+		file_part = (
+			clean_url[clean_url.find("/files/") :]
+			if "/files/" in clean_url
+			else clean_url[clean_url.find("/private/files/") :]
+		)
 		possible_paths = [
 			frappe.get_site_path("public", "files", img_name),
 			frappe.get_site_path("private", "files", img_name),
@@ -1064,6 +1072,7 @@ def _get_image_bytes_and_name(url):
 	if img_name.lower().endswith(".webp"):
 		try:
 			from PIL import Image
+
 			with Image.open(BytesIO(raw_bytes)) as pil_img:
 				converted = pil_img.convert("RGB")
 				out_buf = BytesIO()

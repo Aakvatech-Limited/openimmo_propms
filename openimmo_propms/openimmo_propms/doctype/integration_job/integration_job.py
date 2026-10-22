@@ -67,7 +67,7 @@ class IntegrationJob(Document):
 # --- Whitelisted API Actions ---
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def process_now(name=None):
 	"""
 	Directly executes the integration job synchronously.

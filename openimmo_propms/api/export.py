@@ -4,7 +4,7 @@ from frappe import _
 from openimmo_propms.services.export_engine import run_export
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def run_openimmo_export(
 	source_name,
 	filter_publish=None,
@@ -17,6 +17,7 @@ def run_openimmo_export(
 ):
 	"""Whitelisted wrapper for the minimal metadata-driven export flow."""
 	from frappe.utils import cint
+
 	if cint(run_in_background):
 		frappe.enqueue(
 			"openimmo_propms.services.export_engine.run_export",

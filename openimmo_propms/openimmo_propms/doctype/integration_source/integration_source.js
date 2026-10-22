@@ -111,10 +111,15 @@ frappe.ui.form.on("Integration Source", {
 						},
 						callback: (r) => {
 							if (!r.exc && r.message) {
-								frappe.show_alert({
-									message: __("Export has been queued in background. Check Integration Job for status."),
-									indicator: "green",
-								}, 5);
+								frappe.show_alert(
+									{
+										message: __(
+											"Export has been queued in background. Check Integration Job for status."
+										),
+										indicator: "green",
+									},
+									5
+								);
 								frm.reload_doc();
 							}
 						},
