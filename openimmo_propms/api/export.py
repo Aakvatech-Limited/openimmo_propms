@@ -77,7 +77,7 @@ def preview_jinja_xml(source_name):
 
 	records = _get_records_for_export(source, {})
 	if not records:
-		frappe.throw(_("No records found matching the configured export filters."))
+		frappe.throw(frappe._("No records found matching the configured export filters."))
 
 	record = records[0]
 
