@@ -4,9 +4,13 @@
 # Builds XML only, never parses untrusted input, so there is no XXE surface.
 import xml.etree.ElementTree as ET  # nosemgrep
 from types import SimpleNamespace
+from unittest.mock import patch
+
+import frappe
 
 from frappe.tests.utils import FrappeTestCase
 
+from openimmo_propms.api.export import preview_jinja_xml
 from openimmo_propms.services.export_engine import _append_image_attachment, _requires_full_doc
 
 
@@ -81,3 +85,14 @@ class TestIntegrationSource(FrappeTestCase):
 		)
 
 		self.assertTrue(_requires_full_doc(source))
+
+	def test_preview_jinja_xml_with_no_matching_records_raises_validation_error(self):
+		source = SimpleNamespace(use_jinja_template=1, xml_template="<root/>")
+		with (
+			patch("openimmo_propms.api.export.frappe.get_doc", return_value=source),
+			patch("openimmo_propms.services.export_engine._get_records_for_export", return_value=[]),
+		):
+			with self.assertRaises(frappe.ValidationError) as error:
+				preview_jinja_xml("ftp.immowelt.net")
+
+		self.assertIn("No records found matching the configured export filters.", str(error.exception))
