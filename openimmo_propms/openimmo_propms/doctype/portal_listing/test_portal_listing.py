@@ -8,9 +8,14 @@ from unittest.mock import MagicMock, patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
+from openimmo_propms.openimmo_propms.doctype.integration_source.integration_source import (
+	template_renders_deletes,
+)
 from openimmo_propms.services.export_engine import (
 	_get_configured_export_filters,
+	_keep_rendered_deletes,
 	_persist_portal_listings_state,
+	_rendered_delete_obids,
 )
 
 _SRC = "TEST-SRC-PORTAL"
@@ -200,3 +205,64 @@ class TestDeliveryFailureGuard(FrappeTestCase):
 			run_export("TEST-SRC-FTP")
 
 		mock_persist.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Deletions must only be marked Withdrawn when the XML carries them
+# ---------------------------------------------------------------------------
+
+_XML_WITH_DELETE = """<?xml version="1.0" encoding="UTF-8"?>
+<openimmo><anbieter>
+<immobilie><verwaltung_techn><openimmo_obid>OBID-CHG</openimmo_obid>
+<aktion aktionart="CHANGE"/></verwaltung_techn></immobilie>
+<immobilie><verwaltung_techn><objektnr_intern>OBID-DEL</objektnr_intern>
+<aktion aktionart="DELETE"/></verwaltung_techn></immobilie>
+</anbieter></openimmo>"""
+
+_XML_WITHOUT_DELETE = """<?xml version="1.0" encoding="UTF-8"?>
+<openimmo><anbieter>
+<immobilie><verwaltung_techn><openimmo_obid>OBID-CHG</openimmo_obid>
+<aktion aktionart="CHANGE"/></verwaltung_techn></immobilie>
+</anbieter></openimmo>"""
+
+
+class TestRenderedDeletes(FrappeTestCase):
+	def test_finds_delete_obid(self):
+		obids = _rendered_delete_obids([{"xml_content": _XML_WITH_DELETE}])
+		self.assertEqual(obids, {"OBID-DEL"})
+
+	def test_change_only_has_no_delete(self):
+		self.assertEqual(_rendered_delete_obids([{"xml_content": _XML_WITHOUT_DELETE}]), set())
+
+	@patch("openimmo_propms.services.export_engine.frappe.log_error")
+	def test_unrendered_delete_is_kept_online_and_logged(self, mock_log):
+		source = frappe._dict(name=_SRC)
+		kept = _keep_rendered_deletes(
+			source, [{"xml_content": _XML_WITHOUT_DELETE}], [("PROP-GONE", "OBID-DEL")]
+		)
+		self.assertEqual(kept, [])
+		mock_log.assert_called_once()
+		self.assertEqual(mock_log.call_args.kwargs["title"], f"Portal deletions not rendered: {_SRC}")
+
+	@patch("openimmo_propms.services.export_engine.frappe.log_error")
+	def test_rendered_delete_is_kept_for_withdrawal(self, mock_log):
+		source = frappe._dict(name=_SRC)
+		kept = _keep_rendered_deletes(
+			source, [{"xml_content": _XML_WITH_DELETE}], [("PROP-GONE", "OBID-DEL")]
+		)
+		self.assertEqual(kept, [("PROP-GONE", "OBID-DEL")])
+		mock_log.assert_not_called()
+
+
+class TestTemplateRendersDeletes(FrappeTestCase):
+	def test_batch_template_with_delete_loop(self):
+		tpl = "{% for d in delete_records %}{{ d.openimmo_obid }}{% endfor %}"
+		self.assertTrue(template_renders_deletes(tpl, "Single XML for All Records"))
+
+	def test_batch_template_without_delete_loop(self):
+		tpl = "{% for r in all_records %}{{ r.doc.name }}{% endfor %}"
+		self.assertFalse(template_renders_deletes(tpl, "Single XML for All Records"))
+
+	def test_separate_packaging_never_renders_deletes(self):
+		tpl = "{% for d in delete_records %}{{ d.openimmo_obid }}{% endfor %}"
+		self.assertFalse(template_renders_deletes(tpl, "Separate XML per Record"))
