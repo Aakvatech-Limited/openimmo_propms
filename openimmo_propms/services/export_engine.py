@@ -135,7 +135,9 @@ def run_export(source_name, **kwargs):
 			deleted_count = len(delete_listings)
 			deleted_to_sync = [(l["property"], l["obid"]) for l in delete_listings]
 		else:
-			records = _get_records_for_export(source, kwargs)
+			# VOLL: the portal withdraws every listing missing from the file, so a
+			# modified-window filter would delete all unchanged listings.
+			records = _get_records_for_export(source, kwargs, strip_modified=True)
 			records, blocked = evaluate_quality_gate_for_export(source, records)
 			skipped_records = len(blocked)
 			if not records:
