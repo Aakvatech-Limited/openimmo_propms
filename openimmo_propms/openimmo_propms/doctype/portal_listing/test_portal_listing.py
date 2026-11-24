@@ -205,6 +205,8 @@ class TestDeliveryFailureGuard(FrappeTestCase):
 			run_export("TEST-SRC-FTP")
 
 		mock_persist.assert_not_called()
+		# VOLL withdraws everything not sent, so the modified window must not apply
+		self.assertTrue(mock_get_records.call_args.kwargs.get("strip_modified"))
 
 
 # ---------------------------------------------------------------------------
