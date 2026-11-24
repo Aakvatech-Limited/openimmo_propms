@@ -7,7 +7,6 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import frappe
-
 from frappe.tests.utils import FrappeTestCase
 
 from openimmo_propms.api.export import preview_jinja_xml

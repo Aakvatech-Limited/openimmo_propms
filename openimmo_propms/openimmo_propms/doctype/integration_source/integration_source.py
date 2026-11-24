@@ -130,7 +130,7 @@ class IntegrationSource(Document):
 		# This will be implemented with scheduler hooks
 		pass
 
-	@frappe.whitelist()
+	@frappe.whitelist(methods=["POST"])
 	def sync_now(self):
 		"""Trigger manual sync"""
 		if not self.enabled:
