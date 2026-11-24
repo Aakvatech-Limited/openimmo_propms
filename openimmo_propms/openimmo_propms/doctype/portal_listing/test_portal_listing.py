@@ -268,3 +268,29 @@ class TestTemplateRendersDeletes(FrappeTestCase):
 	def test_separate_packaging_never_renders_deletes(self):
 		tpl = "{% for d in delete_records %}{{ d.openimmo_obid }}{% endfor %}"
 		self.assertFalse(template_renders_deletes(tpl, "Separate XML per Record"))
+
+
+# ---------------------------------------------------------------------------
+# Seed patch must store the obid the export sends, not the property name
+# ---------------------------------------------------------------------------
+
+
+class TestSeedObid(FrappeTestCase):
+	def tearDown(self):
+		_cleanup(f"{_SRC}-E-SEED-1")
+
+	@patch(
+		"openimmo_propms.patches.seed_portal_listings_from_job_history.build_property_data",
+		return_value={"verwaltung_techn.openimmo_obid": "SEED-1"},
+	)
+	@patch("openimmo_propms.services.quality_gate.evaluate_quality_gate_for_export")
+	@patch("openimmo_propms.services.export_engine._get_records_for_export")
+	def test_seed_uses_mapped_obid(self, mock_get_records, mock_gate, mock_build):
+		from openimmo_propms.patches.seed_portal_listings_from_job_history import _seed_source
+
+		record = {"name": "E-SEED-1"}
+		mock_get_records.return_value = [record]
+		mock_gate.return_value = ([record], [])
+		_seed_source(frappe._dict(name=_SRC, target_doctype="Property"))
+
+		self.assertEqual(frappe.db.get_value("Portal Listing", f"{_SRC}-E-SEED-1", "obid"), "SEED-1")
