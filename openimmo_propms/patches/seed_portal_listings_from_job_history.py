@@ -1,5 +1,7 @@
 import frappe
 
+from openimmo_propms.services.export_mapper import build_property_data
+
 
 def execute():
 	"""Seed Portal Listing state from currently published properties per source."""
@@ -49,7 +51,9 @@ def _seed_source(source):
 		if not prop_name or prop_name in existing_props:
 			continue
 
-		obid = record.get("custom_openimmo_obid") or record.get("openimmo_obid") or prop_name
+		# Same identifier run_export sends, so later DELETEs match what the portal holds.
+		mapped = build_property_data(source, record)
+		obid = mapped.get("verwaltung_techn.openimmo_obid") or mapped.get("objektnr_intern") or prop_name
 
 		frappe.get_doc(
 			{

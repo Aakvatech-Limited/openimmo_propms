@@ -11,6 +11,9 @@ from frappe import _
 from frappe.utils import cint, get_url
 from frappe.utils.file_manager import save_file_on_filesystem
 
+from openimmo_propms.openimmo_propms.doctype.integration_source.integration_source import (
+	template_renders_deletes,
+)
 from openimmo_propms.services.export_mapper import build_property_data
 from openimmo_propms.services.immowelt_xml_creator import build_immowelt_document
 from openimmo_propms.services.quality_gate import (
@@ -67,6 +70,16 @@ def run_export(source_name, **kwargs):
 			delete_prop_names = online_prop_names - target_prop_names
 			delete_listings = [online_map[p] for p in delete_prop_names]
 
+			# A Jinja template without a delete block cannot send them: keep them Online
+			# and skip rendering, otherwise a deletion-only run would render an empty record.
+			if (
+				delete_listings
+				and getattr(source, "use_jinja_template", 0)
+				and not template_renders_deletes(source.xml_template, source.record_packaging)
+			):
+				_log_unrendered_deletes(source, [(l["property"], l["obid"]) for l in delete_listings])
+				delete_listings = []
+
 			if not change_records and not delete_listings:
 				if frappe.job:
 					source.db_set("last_sync_status", "Success (No modifications)")
@@ -122,7 +135,9 @@ def run_export(source_name, **kwargs):
 			deleted_count = len(delete_listings)
 			deleted_to_sync = [(l["property"], l["obid"]) for l in delete_listings]
 		else:
-			records = _get_records_for_export(source, kwargs)
+			# VOLL: the portal withdraws every listing missing from the file, so a
+			# modified-window filter would delete all unchanged listings.
+			records = _get_records_for_export(source, kwargs, strip_modified=True)
 			records, blocked = evaluate_quality_gate_for_export(source, records)
 			skipped_records = len(blocked)
 			if not records:
@@ -213,6 +228,23 @@ def run_export(source_name, **kwargs):
 					if not is_valid:
 						frappe.throw(_("Generated XML is not compliant with XSD: {0}").format(error_msg))
 
+		if deleted_to_sync:
+			deleted_to_sync = _keep_rendered_deletes(source, documents, deleted_to_sync)
+			deleted_count = len(deleted_to_sync)
+			for doc_item in documents:
+				doc_item["deleted_records"] = deleted_count
+			if is_teil and not change_records and not deleted_to_sync:
+				source.db_set("last_sync_status", "Deletions not rendered")
+				source.db_set("last_sync_at", run_started)
+				return {
+					"status": "success",
+					"record_count": 0,
+					"skipped_records": skipped_records,
+					"blocked_records": blocked,
+					"skipped": len(blocked),
+					"message": "Pending deletions are not rendered by the template; nothing sent.",
+				}
+
 		should_save = _should_save_file(source, kwargs.get("save_file"))
 		responses = []
 
@@ -278,6 +310,52 @@ def run_export(source_name, **kwargs):
 	except Exception as e:
 		frappe.logger("openimmo_export").error(f"Export failed for {source_name}: {e!s}")
 		raise e
+
+
+def _rendered_delete_obids(documents):
+	"""Return identifiers of every immobilie the XML documents mark as DELETE."""
+	from lxml import etree
+
+	obids = set()
+	parser = etree.XMLParser(resolve_entities=False, no_network=True, recover=True)
+	for document in documents:
+		root = etree.fromstring(document["xml_content"].encode("utf-8"), parser=parser)
+		if root is None:
+			continue
+		for immobilie in root.xpath(
+			"//*[local-name()='immobilie'][.//*[local-name()='aktion'][@aktionart='DELETE']]"
+		):
+			for node in immobilie.xpath(
+				".//*[local-name()='openimmo_obid' or local-name()='objektnr_intern'"
+				" or local-name()='objektnr_extern']"
+			):
+				if (node.text or "").strip():
+					obids.add(node.text.strip())
+	return obids
+
+
+def _keep_rendered_deletes(source, documents, deleted_records):
+	"""Keep only deletions that actually reached the XML.
+
+	A deletion the template does not render must stay Online in Portal Listing,
+	otherwise it is never sent again while the portal keeps the listing.
+	"""
+	rendered = _rendered_delete_obids(documents)
+	kept = [(prop, obid) for prop, obid in deleted_records if obid in rendered]
+	missing = [(prop, obid) for prop, obid in deleted_records if obid not in rendered]
+	if missing:
+		_log_unrendered_deletes(source, missing)
+	return kept
+
+
+def _log_unrendered_deletes(source, missing):
+	frappe.log_error(
+		title=f"Portal deletions not rendered: {source.name}",
+		message="Template does not render delete_records; listings stay Online and are retried.\n"
+		+ "\n".join(f"{prop} ({obid})" for prop, obid in missing),
+		reference_doctype="Integration Source",
+		reference_name=source.name,
+	)
 
 
 def _persist_portal_listings_state(
