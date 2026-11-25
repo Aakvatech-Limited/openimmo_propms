@@ -6,6 +6,17 @@ from frappe import _
 from frappe.model.document import Document
 
 
+def template_renders_deletes(xml_template, record_packaging=None):
+	"""True if a batch Jinja template references delete_records."""
+	if record_packaging == "Separate XML per Record":
+		return False
+
+	from frappe.utils.jinja import get_jenv
+	from jinja2 import meta
+
+	return "delete_records" in meta.find_undeclared_variables(get_jenv().parse(xml_template or ""))
+
+
 class IntegrationSource(Document):
 	def before_save(self):
 		self.status = "Active" if self.enabled else "Inactive"
@@ -18,6 +29,7 @@ class IntegrationSource(Document):
 		self._validate_target_doctype()
 		if self.use_jinja_template and self.xml_template:
 			self._validate_jinja_template()
+			self._warn_if_deletes_not_rendered()
 
 	def on_update(self):
 		if self.enabled and self._has_scheduler_changed():
@@ -113,6 +125,20 @@ class IntegrationSource(Document):
 		from frappe.utils.jinja import validate_template
 
 		validate_template(self.xml_template)
+
+	def _warn_if_deletes_not_rendered(self):
+		"""Partial exports must render delete_records, or withdrawn listings stay on the portal."""
+		if self.operation_type != "Export" or (self.transfer_scope or "").upper() != "TEIL":
+			return
+		if not template_renders_deletes(self.xml_template, self.record_packaging):
+			frappe.msgprint(
+				_(
+					"This partial export template does not render delete_records. "
+					"Listings that lose their publish flag stay on the portal and are logged as errors on every run."
+				),
+				title=_("Deletions not rendered"),
+				indicator="orange",
+			)
 
 	def _has_scheduler_changed(self):
 		"""Check if scheduler settings changed"""
